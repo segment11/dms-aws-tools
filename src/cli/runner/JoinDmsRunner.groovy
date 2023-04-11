@@ -40,6 +40,12 @@ join
     info.privateKeyContent = keyPair.keyMaterial
 
     def support = new InitAgentEnvSupport()
+    def r = support.resetRootPassword(info)
+    if (!r) {
+        log.warn 'reset root password fail'
+        return
+    }
+    info.rootPass = InitAgentEnvSupport.INIT_ROOT_PASS
     support.initOtherNode(info)
 
     support.getSteps(info).each { println it }

@@ -24,7 +24,7 @@ sourceSets {
             srcDirs = ['src']
         }
         resources {
-            srcDirs = ['resources']
+            srcDirs = ['src']
         }
     }
     test {
@@ -83,11 +83,11 @@ dependencies {
 
 jar {
     manifest {
-        attributes "Main-Class": 'RunServer'
+        attributes "Main-Class": 'Runner'
     }
     from {
         configurations.runtimeClasspath.collect {
-            it.isDirectory() || it.name.endsWith('.so') || it.name.endsWith('.dll') ? it : zipTree(it)
+            it.isDirectory() ? it : zipTree(it)
         }
     } {
         exclude "META-INF/*.SF"
@@ -96,4 +96,8 @@ jar {
         exclude "conf.properties"
     }
     zip64 true
+}
+
+tasks.withType(Jar) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

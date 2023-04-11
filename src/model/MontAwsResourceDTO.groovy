@@ -28,8 +28,6 @@ class MontAwsResourceDTO extends BaseRecord<MontAwsResourceDTO> {
     // type is same, use key to diff, eg. routeTable routes
     String subKey
 
-    Integer jobId
-
     Integer status
 
     String referArn
