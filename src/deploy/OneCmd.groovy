@@ -64,7 +64,7 @@ class OneCmd {
     void execInShell(OutputStream os, InputStream is) {
         long beginT = System.currentTimeMillis()
         if (showCmdLog) {
-            log.info '<- ' + cmd
+            log.info '<- ' + cmd + ' timeout: ' + maxWaitTimes * waitMsOnce + 'ms'
         }
         os.write("${cmd.trim()}\r".getBytes())
         os.flush()

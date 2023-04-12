@@ -58,7 +58,7 @@ class CmdExecutor {
     boolean exec() {
         for (one in cmdList) {
             def command = one.cmd
-            log.info '<- ' + command
+            log.info '<- ' + command + ' timeout: ' + one.maxWaitTimes * one.waitMsOnce + 'ms'
             long beginT = System.currentTimeMillis()
             ChannelExec channel
             try {
