@@ -5,6 +5,7 @@ import com.segment.common.Conf
 import deploy.AgentConf
 import deploy.InitAgentEnvSupport
 import deploy.RemoteInfo
+import model.MontJobCheckDTO
 import org.slf4j.LoggerFactory
 
 def h = cli.CommandTaskRunnerHolder.instance
@@ -40,15 +41,18 @@ join
     info.privateKeyContent = keyPair.keyMaterial
 
     def support = new InitAgentEnvSupport()
-    def r = support.resetRootPassword(info)
-    if (!r) {
-        log.warn 'reset root password fail'
-        return
+
+    MontJobCheckDTO.doJobOnce('ec2-reset-root-password-' + ip) {
+        def r = support.resetRootPassword(info)
+        if (!r) {
+            log.warn 'reset root password fail'
+            return
+        }
     }
     info.rootPass = InitAgentEnvSupport.INIT_ROOT_PASS
     support.initOtherNode(info)
 
-    support.getSteps(info).each { println it }
+    support.getSteps(info).each { log.info it }
     support.clearSteps(info)
 
     // deploy agent conf and start agent
@@ -66,7 +70,7 @@ join
     support.initAgentConf(info, agentConf)
     support.startAgentCmd(info)
 
-    support.getSteps(info).each { println it }
+    support.getSteps(info).each { log.info it }
     support.clearSteps(info)
 
     return

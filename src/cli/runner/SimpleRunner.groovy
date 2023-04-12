@@ -17,7 +17,7 @@ list
     def type = cmd.getOptionValue('type')
     if ('region' == type) {
         AwsCaller.regions.each {
-            println it.name + ', ' + it.des
+            log.info it.name + ', ' + it.des
         }
         return
     }
@@ -80,6 +80,31 @@ list
         return
     }
 
+    if ('instance' == type) {
+        def region = cmd.getOptionValue('region')
+        def vpcId = cmd.getOptionValue('vpcId')
+        if (!vpcId) {
+            log.warn 'no vpc id given'
+            return
+        }
+
+        def list = AwsCaller.instance.listInstance(region, vpcId)
+        if (!list) {
+            log.warn 'no instance found'
+            return
+        }
+
+        List<List<String>> table = []
+        List<String> header = ['instance id', 'instance type', 'state', 'private ip', 'public ip']
+        table << header
+        list.each {
+            List<String> row = [it.instanceId, it.instanceType, it.state.toString(), it.privateIpAddress, it.publicIpAddress]
+            table << row
+        }
+        TablePrinter.print(table)
+        return
+    }
+
     if ('instanceType' == type) {
         def region = cmd.getOptionValue('region')
         def list = AwsCaller.instance.getInstanceTypeListInRegion(region)
@@ -91,7 +116,7 @@ list
         }
 
         for (one in filterList) {
-            println one.toString()
+            log.info one.toString()
         }
         return
     }
@@ -107,7 +132,7 @@ list
         }
 
         for (one in filterList) {
-            println one.toString()
+            log.info one.toString()
         }
         return
     }

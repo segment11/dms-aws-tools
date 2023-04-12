@@ -1,10 +1,10 @@
 package aws
 
-import com.amazonaws.services.ec2.model.KeyPair
-import com.amazonaws.services.ec2.model.RunInstancesRequest
-import com.amazonaws.services.ec2.model.Subnet
+import com.amazonaws.services.ec2.model.*
 import com.segment.common.Conf
+import com.segment.common.Utils
 import common.Event
+import ex.AwsResourceCreateException
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
 import model.MontAwsResourceDTO
@@ -15,8 +15,6 @@ import model.json.ExtendParams
 @Singleton
 class AwsResourceManager {
     private AwsCaller awsCaller = AwsCaller.instance
-
-    private String awsAccountId
 
     final String allCidrIp = '0.0.0.0/0'
 
@@ -30,16 +28,196 @@ class AwsResourceManager {
         1 + allAzList.indexOf(zoneName)
     }
 
-    int waitSeconds(String region, int defaultWaitSeconds) {
-        int waitSecondsFinal
-        def controllerRegion = Conf.instance.get('controllerRegion')
-        if (controllerRegion != region) {
-            // cross region
-            waitSecondsFinal = defaultWaitSeconds * 2
-        } else {
-            waitSecondsFinal = defaultWaitSeconds
+    synchronized VpcInfo createVpcIfNotExists(String region, String cidrBlock) {
+        def oneList = new MontAwsResourceDTO(
+                region: region,
+                type: MontAwsResourceDTO.Type.vpc.name()).loadList()
+        if (oneList) {
+            for (one in oneList) {
+                def vpcInfo = VpcInfo.from(one.extendParams)
+                if (vpcInfo.cidrBlock == cidrBlock) {
+                    log.info('skip as using old one: {}', one.arn)
+                    return vpcInfo
+                }
+            }
         }
-        waitSecondsFinal
+
+        Vpc targetVpc
+        def vpcList = awsCaller.listVpc(region)
+        if (vpcList) {
+            for (vpcExists in vpcList) {
+                if (vpcExists.cidrBlock == cidrBlock) {
+                    targetVpc = vpcList[0]
+                }
+            }
+        }
+
+        if (!targetVpc) {
+            Event.builder().type(Event.Type.vpc).reason('create vpc').
+                    result('region: ' + region).build().log('with cidr block: ' + cidrBlock).add()
+
+            targetVpc = awsCaller.createVpc(region, cidrBlock)
+
+            // wait a while and then create subnet / igw etc.
+            def waitSeconds = Conf.instance.getInt('vpc.created.wait.seconds', 5)
+            log.warn 'wait after create new vpc, seconds: {}', waitSeconds
+            Thread.sleep(waitSeconds * 1000)
+        }
+
+        Map<String, String> params = [:]
+        params.id = targetVpc.vpcId
+        params.region = region
+        params.cidrBlock = targetVpc.cidrBlock
+        params.groupId = awsCaller.getDefaultSg(region, targetVpc.vpcId)
+        params.routeTableId = awsCaller.getDefaultRouteTable(region, targetVpc.vpcId)
+
+        new MontAwsResourceDTO(
+                vpcId: targetVpc.vpcId,
+                region: region,
+                arn: targetVpc.vpcId,
+                type: MontAwsResourceDTO.Type.vpc.name(),
+                extendParams: new ExtendParams(params: params)).add()
+
+        return VpcInfo.from(params)
+    }
+
+    synchronized void initSecurityGroupRules(VpcInfo vpcInfo, Integer proxyPort) {
+        final String allIpProtocol = '-1'
+
+        def region = vpcInfo.region
+        def vpcId = vpcInfo.id
+
+        String subKeyFromUser = 'user_application' + ':' + vpcInfo.cidrBlock
+        def oneFromUser = new MontAwsResourceDTO(
+                vpcId: vpcId,
+                type: MontAwsResourceDTO.Type.sgr.name(),
+                subKey: subKeyFromUser).one()
+        if (!oneFromUser) {
+            Event.builder().type(Event.Type.vpc).reason('add sgr').
+                    result('vpcId: ' + vpcId).build().log('subKey: ' + subKeyFromUser).add()
+
+            // all ip (user application vpc cidr is better) can access this vpc proxy port
+            List<IpPermission> ipPermissions = []
+            ipPermissions << new IpPermission().
+                    withIpProtocol('tcp').
+                    withIpv4Ranges([new IpRange().withCidrIp(allCidrIp)]).
+                    withFromPort(proxyPort).withToPort(proxyPort)
+
+            final int sshPort = 22
+            ipPermissions << new IpPermission().
+                    withIpProtocol('tcp').
+                    withIpv4Ranges([new IpRange().withCidrIp(allCidrIp)]).
+                    withFromPort(sshPort).withToPort(sshPort)
+
+            // may already exists, aws just response warning
+            def isOkIngress = awsCaller.createSgrIngress(region, vpcInfo.groupId, ipPermissions)
+            if (!isOkIngress) {
+                throw new AwsResourceCreateException('create sgr ingress fail! groupId: '
+                        + vpcInfo.groupId + ' subKey: ' + subKeyFromUser)
+            }
+
+            new MontAwsResourceDTO(
+                    vpcId: vpcId,
+                    region: region,
+                    type: MontAwsResourceDTO.Type.sgr.name(),
+                    arn: Utils.uuid('sgr-i-'),
+                    subKey: subKeyFromUser).add()
+        } else {
+            log.info('skip as using old one: {}', oneFromUser.arn)
+        }
+
+        // egress visit internet
+        String subKey2 = vpcInfo.cidrBlock + ':' + allCidrIp
+        def two = new MontAwsResourceDTO(
+                vpcId: vpcId,
+                type: MontAwsResourceDTO.Type.sgr.name(),
+                subKey: subKey2).one()
+        if (!two) {
+            Event.builder().type(Event.Type.vpc).reason('add sgr').
+                    result('vpcId: ' + vpcId).build().log('subKey: ' + subKey2).add()
+
+            List<IpPermission> ipPermissionsEgress = []
+            ipPermissionsEgress << new IpPermission().
+                    withIpProtocol(allIpProtocol).
+                    withIpv4Ranges([new IpRange().withCidrIp(allCidrIp)])
+            def isOkEgress = awsCaller.createSgrEgress(region, vpcInfo.groupId, ipPermissionsEgress)
+            if (!isOkEgress) {
+                throw new AwsResourceCreateException('create sgr egress fail! groupId: '
+                        + vpcInfo.groupId + ' cidrIp: ' + isOkEgress)
+            }
+
+            new MontAwsResourceDTO(
+                    vpcId: vpcId,
+                    region: region,
+                    type: MontAwsResourceDTO.Type.sgr.name(),
+                    arn: Utils.uuid('sgr-e-'),
+                    referArn: vpcInfo.groupId,
+                    subKey: subKey2).add()
+        } else {
+            log.info('skip as using old one: {}', two.arn)
+        }
+    }
+
+    synchronized boolean addIgwRoute(String region, String vpcId, String routeTableId, String igwId) {
+        addRoute(region, vpcId, routeTableId, allCidrIp, igwId)
+    }
+
+    synchronized boolean addRoute(String region, String vpcId, String routeTableId, String cidrBlock, String gatewayId) {
+        String subKey = cidrBlock + ':' + gatewayId
+
+        def one = new MontAwsResourceDTO(
+                vpcId: vpcId,
+                type: MontAwsResourceDTO.Type.routes.name(),
+                subKey: subKey).one()
+        if (one) {
+            log.info('skip as using old one: {}', one.arn)
+            return true
+        }
+
+        Event.builder().type(Event.Type.vpc).reason('add route').
+                result('vpcId: ' + vpcId).build().log('subKey: ' + subKey).add()
+
+        awsCaller.createRouteByGateway(region, routeTableId, cidrBlock, gatewayId)
+        new MontAwsResourceDTO(
+                vpcId: vpcId,
+                region: region,
+                type: MontAwsResourceDTO.Type.routes.name(),
+                arn: Utils.uuid('routes-'),
+                referArn: routeTableId,
+                subKey: subKey).add()
+        true
+    }
+
+    synchronized String addInternetGateway(VpcInfo vpcInfo) {
+        def region = vpcInfo.region
+        def vpcId = vpcInfo.id
+
+        String subKey = vpcId + ':internet_gateway'
+
+        def one = new MontAwsResourceDTO(
+                vpcId: vpcId,
+                type: MontAwsResourceDTO.Type.igw.name(),
+                subKey: subKey).one()
+        if (one) {
+            log.info('skip as using old one: {}', one.arn)
+            return one.arn
+        }
+
+        Event.builder().type(Event.Type.vpc).reason('add internet gateway').
+                result('vpcId: ' + vpcId).build().log('subKey: ' + subKey).add()
+
+        def igw = awsCaller.createInternetGateway(region)
+        def igwId = igw.internetGatewayId
+        new MontAwsResourceDTO(
+                vpcId: vpcId,
+                region: region,
+                type: MontAwsResourceDTO.Type.igw.name(),
+                arn: igwId,
+                referArn: vpcId,
+                subKey: subKey).add()
+
+        awsCaller.attachInternetGateway(region, vpcId, igwId)
+        igwId
     }
 
     // cidrBlockSuffix -> 1.0/24
@@ -74,7 +252,6 @@ class AwsResourceManager {
         params.zone = az
 
         new MontAwsResourceDTO(
-                awsAccountId: awsAccountId,
                 vpcId: vpcId,
                 region: region,
                 type: MontAwsResourceDTO.Type.subnet.name(),
@@ -131,7 +308,6 @@ class AwsResourceManager {
         params.keyPairId = keyPair.keyPairId
 
         new MontAwsResourceDTO(
-                awsAccountId: awsAccountId,
                 vpcId: vpcId,
                 region: region,
                 type: MontAwsResourceDTO.Type.kp.name(),
@@ -192,7 +368,6 @@ class AwsResourceManager {
         params.stateCode = instance.state.code
 
         new MontAwsResourceDTO(
-                awsAccountId: awsAccountId,
                 vpcId: vpcId,
                 region: region,
                 arn: instance.instanceId,

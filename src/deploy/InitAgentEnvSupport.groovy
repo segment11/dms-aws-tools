@@ -298,7 +298,7 @@ class InitAgentEnvSupport {
 
         String destAgentDir = AGENT_FILE.replace('.tar.gz', '')
 
-        String javaCmd = Conf.instance.getString('agent.javaCmd',
+        String javaCmd = Conf.instance.getString('agent.java.cmd',
                 '../jdk8/zulu8.66.0.15-ca-jdk8.0.352-linux_x64/bin/java -Xms128m -Xmx256m')
         String startCommand = "nohup ${javaCmd} ".toString() +
                 "-Djava.library.path=. -cp . -jar dms_agent-1.0.jar > dmc.log 2>&1 &"

@@ -120,12 +120,112 @@ class AwsCaller {
         result.vpcs
     }
 
+    Vpc createVpc(String regionName, String cidrBlock) {
+        def client = getEc2Client(regionName)
+        def tagSpec = new TagSpecification().
+                withResourceType(ResourceType.Vpc).
+                withTags(new Tag('region', regionName))
+        def request = new CreateVpcRequest().
+                withCidrBlock(cidrBlock).
+                withTagSpecifications(tagSpec)
+        def result = client.createVpc(request)
+        result.vpc
+    }
+
+    void deleteVpc(String regionName, String vpcId) {
+        def client = getEc2Client(regionName)
+        def request = new DeleteVpcRequest().
+                withVpcId(vpcId)
+        client.deleteVpc(request)
+    }
+
     String getDefaultSg(String regionName, String vpcId) {
         def client = getEc2Client(regionName)
         def request = new DescribeSecurityGroupsRequest().
                 withFilters(new Filter('vpc-id').withValues(vpcId))
         def result = client.describeSecurityGroups(request)
         result.securityGroups[0].groupId
+    }
+
+    Boolean createSgrIngress(String regionName, String groupId, List<IpPermission> ipPermissions) {
+        def client = getEc2Client(regionName)
+        def request = new AuthorizeSecurityGroupIngressRequest().
+                withGroupId(groupId).
+                withIpPermissions(ipPermissions)
+        try {
+            def result = client.authorizeSecurityGroupIngress(request)
+            result.return
+        } catch (AmazonEC2Exception e) {
+            def message = e.message
+            if (message && message.contains('already exists')) {
+                log.warn message
+                return true
+            } else {
+                throw e
+            }
+        }
+    }
+
+    Boolean createSgrEgress(String regionName, String groupId, List<IpPermission> ipPermissions) {
+        def client = getEc2Client(regionName)
+        def request = new AuthorizeSecurityGroupEgressRequest().
+                withGroupId(groupId).
+                withIpPermissions(ipPermissions)
+        try {
+            def result = client.authorizeSecurityGroupEgress(request)
+            result.return
+        } catch (AmazonEC2Exception e) {
+            def message = e.message
+            if (message && message.contains('already exists')) {
+                log.warn message
+                return true
+            } else {
+                throw e
+            }
+        }
+    }
+
+    RouteTable getDefaultRouteTable(String regionName, String vpcId) {
+        def client = getEc2Client(regionName)
+        def request = new DescribeRouteTablesRequest().
+                withFilters(new Filter('vpc-id').withValues(vpcId))
+        def result = client.describeRouteTables(request)
+        result.routeTables[0]
+    }
+
+    Boolean createRouteByGateway(String regionName, String routeTableId, String cidrBlock, String gatewayId) {
+        def client = getEc2Client(regionName)
+        def request = new CreateRouteRequest().
+                withRouteTableId(routeTableId).
+                withDestinationCidrBlock(cidrBlock).
+                withGatewayId(gatewayId)
+
+        def result = client.createRoute(request)
+        result.return
+    }
+
+    void deleteRoute(String regionName, String routeTableId, String cidrBlock) {
+        def client = getEc2Client(regionName)
+        def request = new DeleteRouteRequest().
+                withRouteTableId(routeTableId).
+                withDestinationCidrBlock(cidrBlock)
+
+        client.deleteRoute(request)
+    }
+
+    InternetGateway createInternetGateway(String regionName) {
+        def client = getEc2Client(regionName)
+        def request = new CreateInternetGatewayRequest()
+        def result = client.createInternetGateway(request)
+        result.internetGateway
+    }
+
+    void attachInternetGateway(String regionName, String vpcId, String gatewayId) {
+        def client = getEc2Client(regionName)
+        def request = new AttachInternetGatewayRequest().
+                withVpcId(vpcId).
+                withInternetGatewayId(gatewayId)
+        client.attachInternetGateway(request)
     }
 
     List<Subnet> listSubnet(String regionName, String vpcId) {
@@ -154,7 +254,7 @@ class AwsCaller {
         subnet
     }
 
-    Subnet getSubnetById(String regionName, String subnetId){
+    Subnet getSubnetById(String regionName, String subnetId) {
         def client = getEc2Client(regionName)
         def request = new DescribeSubnetsRequest().withSubnetIds(subnetId)
         def result = client.describeSubnets(request)
@@ -202,6 +302,16 @@ class AwsCaller {
         result.keyPair
     }
 
+    Instance runEc2Instance(String regionName, RunInstancesRequest request, boolean isWaitUntilRunning = false) {
+        def client = getEc2Client(regionName)
+        def result = client.runInstances(request)
+        if (isWaitUntilRunning) {
+            def waiters = client.waiters()
+            waiters.instanceRunning()
+        }
+        result.reservation.instances[0]
+    }
+
     Instance getEc2Instance(String regionName, String name) {
         def client = getEc2Client(regionName)
         def request = new DescribeInstancesRequest().
@@ -216,14 +326,6 @@ class AwsCaller {
             return null
         }
         instances[0]
-    }
-
-    Instance runEc2Instance(String regionName, RunInstancesRequest request, boolean isWaitUntilRunning = false) {
-        def client = getEc2Client(regionName)
-        def result = client.runInstances(request)
-//        def waiters = client.waiters()
-//        waiters.instanceRunning()
-        result.reservation.instances[0]
     }
 
     List<InstanceStateChange> stopEc2Instance(String regionName, String instanceId) {
@@ -250,5 +352,23 @@ class AwsCaller {
             return null
         }
         result.instanceStatuses[0]
+    }
+
+    List<Instance> listInstance(String regionName, String vpcId) {
+        def client = getEc2Client(regionName)
+        def request = new DescribeInstancesRequest().
+                withFilters(new Filter('vpc-id').withValues(vpcId))
+        def result = client.describeInstances(request)
+        if (!result.reservations) {
+            return null
+        }
+
+        List<Instance> list = []
+        result.reservations.each {
+            it.instances.each {
+                list.add(it)
+            }
+        }
+        list
     }
 }

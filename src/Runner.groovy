@@ -43,8 +43,8 @@ projectDir.eachFile {
 }
 
 // init db access
-def dbDataDir = c.getString('dbDataDir', c.projectPath('/dms-aws-tools-data'))
-def ds = Ds.h2LocalWithPool(dbDataDir, 'default_ds')
+def dbDataFile = c.getString('db.data.file', c.projectPath('/dms-aws-tools-data'))
+def ds = Ds.h2LocalWithPool(dbDataFile, 'default_ds')
 def d = new D(ds, new MySQLDialect())
 // check if need create table first
 List<String> tableNameList = d.query("show tables", String).collect { it.toUpperCase() }
@@ -54,7 +54,6 @@ create table mont_aws_resource (
     id int auto_increment primary key,
     region varchar(20),
     vpc_id varchar(50),
-    aws_account_id varchar(12),
     arn varchar(200), -- aws resource name id
     type varchar(50), -- vpc/subnet etc.
     sub_key varchar(100),
@@ -77,6 +76,13 @@ create table mont_event (
 );
 create index idx_mont_event_type_reason on mont_event(type, reason);
 create index idx_mont_event_created_date on mont_event(created_date);
+
+create table mont_job_check (
+    id int auto_increment primary key,
+    job_key varchar(50),
+    updated_date timestamp default current_timestamp
+);
+create index idx_mont_job_check_job_key on mont_job_check(job_key);
 '''
     ddl.trim().split(';').each {
         try {
@@ -101,8 +107,8 @@ refreshLoader.start()
 
 def options = new Options()
 options.addOption('l', 'list', false, '')
-options.addOption('c', 'createSubnet', false, 'create subnet')
-options.addOption('t', 'type', true, 'region/az/vpc/subnet/instanceType/image')
+options.addOption('c', 'create', false, 'create')
+options.addOption('t', 'type', true, 'region/az/vpc/subnet/instance/instanceType/image')
 options.addOption('r', 'region', true, '--region=ap-northeast-1')
 options.addOption('a', 'az', true, '--az=ap-northeast-1a')
 options.addOption('v', 'vpcId', true, '--vpcId=vpcId')
@@ -110,6 +116,7 @@ options.addOption('s', 'subnetId', true, '--subnetId=subnetId')
 options.addOption('b', 'cidrBlock', true, '--cidrBlock=10.1.0.0/16')
 options.addOption('k', 'keyword', true, 'for filter, eg. --keyword=c3.')
 options.addOption('e', 'ec2', true, 'launch ec2 instance')
+options.addOption('p', 'publicIpv4', false, 'set true if launch ec2 instance with a public ipv4')
 options.addOption('m', 'imageId', true, 'image id')
 options.addOption('i', 'instanceType', true, 'instance type')
 options.addOption('j', 'join', true, 'join dms cluster, eg. --join=10.1.0.23')
