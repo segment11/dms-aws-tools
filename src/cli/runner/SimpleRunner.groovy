@@ -24,9 +24,11 @@ list
         return
     }
 
+    def caller = AwsCaller.instance
+
     if ('az' == type) {
         def region = cmd.getOptionValue('region')
-        def list = AwsCaller.instance.getAvailabilityZoneList(region, true)
+        def list = caller.getAvailabilityZoneList(region, true)
         List<List<String>> table = []
         List<String> header = ['region name', 'zone name', 'state']
         table << header
@@ -40,7 +42,7 @@ list
 
     if ('vpc' == type) {
         def region = cmd.getOptionValue('region')
-        def list = AwsCaller.instance.listVpc(region)
+        def list = caller.listVpc(region)
         if (!list) {
             log.warn 'no vpc found'
             return
@@ -65,7 +67,7 @@ list
             return
         }
 
-        def list = AwsCaller.instance.listSubnet(region, vpcId)
+        def list = caller.listSubnet(region, vpcId)
         if (!list) {
             log.warn 'no subnet found'
             return
@@ -90,7 +92,7 @@ list
             return
         }
 
-        def list = AwsCaller.instance.listInstance(region, vpcId)
+        def list = caller.listInstance(region, vpcId)
         if (!list) {
             log.warn 'no instance found'
             return
@@ -109,7 +111,7 @@ list
 
     if ('instanceType' == type) {
         def region = cmd.getOptionValue('region')
-        def list = AwsCaller.instance.getInstanceTypeListInRegion(region)
+        def list = caller.getInstanceTypeListInRegion(region)
         def keyword = cmd.getOptionValue('keyword')
         def filterList = keyword ? list.findAll { it.instanceType.contains(keyword) } : list
         if (!filterList) {
@@ -125,7 +127,7 @@ list
 
     if ('image' == type) {
         def region = cmd.getOptionValue('region')
-        def list = AwsCaller.instance.getImageListInRegion(region)
+        def list = caller.getImageListInRegion(region)
         def keyword = cmd.getOptionValue('keyword')
         def filterList = keyword ? list.findAll { it.name.contains(keyword) } : list
         if (!filterList) {
@@ -149,4 +151,7 @@ list
         TablePrinter.printRecordList(list.collect { (Record) it })
         return
     }
+
+    log.warn 'type not support: ' + type
+    return
 }

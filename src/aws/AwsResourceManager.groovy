@@ -81,7 +81,7 @@ class AwsResourceManager {
         return VpcInfo.from(params)
     }
 
-    synchronized void initSecurityGroupRules(VpcInfo vpcInfo, Integer proxyPort) {
+    synchronized void initSecurityGroupRules(VpcInfo vpcInfo, Integer... exposePort) {
         final String allIpProtocol = '-1'
 
         def region = vpcInfo.region
@@ -96,18 +96,13 @@ class AwsResourceManager {
             Event.builder().type(Event.Type.vpc).reason('add sgr').
                     result('vpcId: ' + vpcId).build().log('subKey: ' + subKeyFromUser).add()
 
-            // all ip (user application vpc cidr is better) can access this vpc proxy port
             List<IpPermission> ipPermissions = []
-            ipPermissions << new IpPermission().
-                    withIpProtocol('tcp').
-                    withIpv4Ranges([new IpRange().withCidrIp(allCidrIp)]).
-                    withFromPort(proxyPort).withToPort(proxyPort)
-
-            final int sshPort = 22
-            ipPermissions << new IpPermission().
-                    withIpProtocol('tcp').
-                    withIpv4Ranges([new IpRange().withCidrIp(allCidrIp)]).
-                    withFromPort(sshPort).withToPort(sshPort)
+            for (port in exposePort) {
+                ipPermissions << new IpPermission().
+                        withIpProtocol('tcp').
+                        withIpv4Ranges([new IpRange().withCidrIp(allCidrIp)]).
+                        withFromPort(port).withToPort(port)
+            }
 
             // may already exists, aws just response warning
             def isOkIngress = awsCaller.createSgrIngress(region, vpcInfo.groupId, ipPermissions)
@@ -278,11 +273,10 @@ class AwsResourceManager {
         awsCaller.deleteKeyPair(region, keyName)
     }
 
-    synchronized KeyPair getKeyPair(String region, String vpcId, String keyName) {
+    synchronized KeyPair getKeyPair(String region, String keyName) {
         // get key pair
         String subKey = keyName
         def one = new MontAwsResourceDTO(
-                vpcId: vpcId,
                 type: MontAwsResourceDTO.Type.kp.name(),
                 subKey: subKey).one()
         if (one) {
@@ -297,8 +291,15 @@ class AwsResourceManager {
             return keyPair
         }
 
+        // check if already exists
+        def isKeyPairExists = awsCaller.getKeyPair(region, keyName) != null
+        if (isKeyPairExists) {
+            log.warn('key pair already exists: {}', keyName)
+            return null
+        }
+
         Event.builder().type(Event.Type.ec2).reason('create kp').
-                result('vpcId: ' + vpcId).build().log('subKey: ' + subKey).add()
+                result('region: ' + region).build().log('subKey: ' + subKey).add()
 
         def keyPair = awsCaller.createKeyPair(region, keyName)
 
@@ -309,7 +310,7 @@ class AwsResourceManager {
         params.keyPairId = keyPair.keyPairId
 
         new MontAwsResourceDTO(
-                vpcId: vpcId,
+                vpcId: '*',
                 region: region,
                 type: MontAwsResourceDTO.Type.kp.name(),
                 arn: keyPair.keyPairId,
@@ -317,29 +318,6 @@ class AwsResourceManager {
                 extendParams: new ExtendParams(params: params)).add()
 
         keyPair
-    }
-
-    void stopEc2Instance(String region, String instanceId) {
-        Event.builder().type(Event.Type.ec2).reason('stop ec2').
-                result('region: ' + region).build().log('instanceId: ' + instanceId).add()
-
-        def stateList = awsCaller.stopEc2Instance(region, instanceId)
-        log.warn stateList.toString()
-    }
-
-    void terminateEc2Instance(String region, String instanceId) {
-        Event.builder().type(Event.Type.ec2).reason('terminate ec2').
-                result('region: ' + region).build().log('instanceId: ' + instanceId).add()
-
-        // check if already be terminated by user in aws console
-        def instanceStatus = awsCaller.getEc2InstanceStatus(region, instanceId)
-        if (instanceStatus == null) {
-            log.warn 'already terminated by user in aws console, instance id: {}', instanceId
-            return
-        }
-
-        def stateList = awsCaller.terminateEc2Instance(region, instanceId)
-        log.warn stateList.toString()
     }
 
     InstanceInfo runEc2Instance(String region, String az, String vpcId, String subnetId,

@@ -1,7 +1,10 @@
 package cli.runner
 
+import aws.AwsCaller
 import aws.AwsResourceManager
 import com.segment.common.Conf
+import model.MontAwsResourceDTO
+import model.json.ExtendParams
 import org.slf4j.LoggerFactory
 
 def h = cli.CommandTaskRunnerHolder.instance
@@ -24,19 +27,15 @@ create
             return
         }
 
+        // redis proxy server port
         int proxyPort = Conf.instance.getInt('proxy.port', 8125)
 
         def manager = AwsResourceManager.instance
         def vpcInfo = manager.createVpcIfNotExists(region, cidrBlock)
         log.info 'vpc info: {}', vpcInfo
-        manager.initSecurityGroupRules(vpcInfo, proxyPort)
+        manager.initSecurityGroupRules(vpcInfo, proxyPort, 22, 80, 81, 5010)
 
         def igwId = manager.addInternetGateway(vpcInfo)
-
-        def waitSeconds = Conf.instance.getInt('igw.attached.wait.seconds', 5)
-        log.warn 'wait after attach new igw, seconds: {}', waitSeconds
-        Thread.sleep(waitSeconds * 1000)
-
         manager.addIgwRoute(region, vpcInfo.id, vpcInfo.routeTableId, igwId)
 
         return
@@ -58,7 +57,46 @@ create
         return
     }
 
-    log.warn 'type not support: ' + type
+    if ('keyPairLocal' == type) {
+        def region = cmd.getOptionValue('region')
+        def vpcId = cmd.getOptionValue('vpcId')
+        if (!vpcId) {
+            log.warn 'vpcId required'
+            return
+        }
 
+        def f = new File('/home/kerry/dms-node-kp.pem')
+        if (!f.exists()) {
+            log.warn 'file not exists'
+            return
+        }
+        def content = f.text
+
+        def keyName = Conf.instance.getString('default.ec2.key.pair.name', 'dms-node-only-one')
+        def keyPairInfo = AwsCaller.instance.getKeyPair(region, keyName)
+        if (!keyPairInfo) {
+            log.warn 'key pair not exists'
+            return
+        }
+
+        Map<String, String> params = [:]
+        params.keyFingerprint = keyPairInfo.keyFingerprint
+
+        params.keyName = keyName
+        params.keyPairId = keyPairInfo.keyPairId
+        params.keyMaterial = content
+
+        new MontAwsResourceDTO(
+                vpcId: vpcId,
+                region: region,
+                type: MontAwsResourceDTO.Type.kp.name(),
+                arn: keyPairInfo.keyPairId,
+                subKey: keyName,
+                extendParams: new ExtendParams(params: params)).add()
+        log.info 'add to local db success'
+        return
+    }
+
+    log.warn 'type not support: ' + type
     return
 }

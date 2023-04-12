@@ -12,12 +12,14 @@ class MontJobCheckDTO extends BaseRecord<MontJobCheckDTO> {
 
     Date updatedDate
 
-    static void doJobOnce(String key, Closure closure) {
+    static boolean doJobOnce(String key, Closure<Boolean> closure) {
         def one = new MontJobCheckDTO(jobKey: key).queryFields('id').one()
         if (one) {
-            return
+            // already done
+            return true
         }
-        closure.call()
+        def r = closure.call()
         new MontJobCheckDTO(jobKey: key, updatedDate: new Date()).add()
+        r
     }
 }

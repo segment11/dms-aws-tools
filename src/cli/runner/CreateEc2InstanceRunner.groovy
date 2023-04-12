@@ -5,9 +5,6 @@ import aws.AwsResourceManager
 import com.amazonaws.services.ec2.model.*
 import com.segment.common.Conf
 import common.Event
-import deploy.DeploySupport
-import deploy.OneCmd
-import deploy.RemoteInfo
 import ex.AwsResourceCreateException
 import org.slf4j.LoggerFactory
 
@@ -47,15 +44,14 @@ ec2
     def subnet = caller.getSubnetById(region, subnetId)
     def az = subnet.availabilityZone
 
-    def keyName = 'dms-node-only-one'
+    def keyName = Conf.instance.getString('default.ec2.key.pair.name', 'dms-node-only-one')
     def manager = AwsResourceManager.instance
-    def keyPair = manager.getKeyPair(region, vpcId, keyName)
+    manager.getKeyPair(region, keyName)
 
     def groupId = caller.getDefaultGroupId(region, vpcId)
 
-    def isNeedPublicIp = cmd.hasOption('publicIpv4')
     def networkInterface = new InstanceNetworkInterfaceSpecification().
-            withAssociatePublicIpAddress(isNeedPublicIp).
+            withAssociatePublicIpAddress(true).
             withDeleteOnTermination(true).
             withGroups(groupId).
             withSubnetId(subnetId).
@@ -78,25 +74,15 @@ ec2
 
     final int runningStateCode = 16
     if (!instanceInfo.running()) {
-        def itemValueWaitTimes = Conf.instance.getInt('ec2.launch.wait.times', 12)
-        // 2min
-        int maxWaitTimes = itemValueWaitTimes ? itemValueWaitTimes as int : 12
-        int count = 0
-        while (count <= maxWaitTimes) {
-            count++
-            Thread.currentThread().sleep(10000)
-
-            def stateCode = caller.getEc2InstanceStatus(region, instanceInfo.id)
-            if (runningStateCode == stateCode) {
-                instanceInfo.stateCode = runningStateCode
-                Event.builder().type(Event.Type.ec2).
-                        reason('instance running').
-                        result(name).
-                        build().log(instanceInfo.toString()).add()
-                break
-            } else {
-                log.info 'instance is not running yet. ip: {}', instanceInfo.ipv4
-            }
+        def isWaitOk = caller.waitUntilInstanceStateCode(region, instanceInfo.id, runningStateCode)
+        if (isWaitOk) {
+            instanceInfo.stateCode = runningStateCode
+            Event.builder().type(Event.Type.ec2).
+                    reason('instance running').
+                    result(name).
+                    build().log(instanceInfo.toString()).add()
+        } else {
+            log.info 'instance is not running yet. ip: {}', instanceInfo.ipv4
         }
     }
 
@@ -108,39 +94,6 @@ ec2
     def waitSeconds = Conf.instance.getInt('ec2.launch.running.wait.seconds', 15)
     log.info 'wait seconds: {}, then ssh connect', waitSeconds
     Thread.sleep(waitSeconds * 1000)
-
-    // init dms server env
-    if (isNeedPublicIp) {
-        def ec2Instance = caller.getEc2Instance(region, name)
-        def publicIpv4 = ec2Instance.publicIpAddress
-
-        // init env
-        def info = new RemoteInfo()
-        info.host = publicIpv4
-        info.port = 22
-        info.user = 'admin'
-        info.isUsePass = false
-        info.privateKeySuffix = '.pem'
-        info.privateKeyContent = keyPair.keyMaterial
-
-        def deploy = DeploySupport.instance
-
-        List<OneCmd> cmdList = []
-        cmdList << new OneCmd(cmd: 'wget http://segInfra.cloud/docker.tar -O /home/admin/docker.tar')
-        cmdList << new OneCmd(cmd: 'wget http://segInfra.cloud/jdk8.tar.gz -O /home/admin/jdk8.tar.gz')
-        cmdList << new OneCmd(cmd: 'wget http://segInfra.cloud/agentV1.tar.gz -O /home/admin/agentV1.tar.gz')
-        def result = deploy.exec(info, cmdList, 90)
-        log.info 'wget files result: {}', result
-
-        def privateIpPrefix = ec2Instance.privateIpAddress.split('.')[0] + '.'
-        def confFileContent = """
-dbDataFile=/data/dms/db;FILE_LOCK=socket
-agent.javaCmd=../jdk8/zulu8.64.0.19-ca-jdk8.0.345-linux_x64/bin/java -Xms128m -Xmx256m
-localIpFilterPre=${privateIpPrefix}
-"""
-        new File('/tmp/dms.conf.properties').text = confFileContent.toString()
-        deploy.send(info, '/tmp/dms.conf.properties', '/home/admin/conf.properties')
-    }
 
     return
 }

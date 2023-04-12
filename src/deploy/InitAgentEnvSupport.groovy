@@ -111,6 +111,10 @@ class InitAgentEnvSupport {
             return true
         }
 
+        unTar(info, destFilePath)
+    }
+
+    boolean unTar(RemoteInfo info, String destFilePath) {
         String suf
         String tarOpts
         if (destFilePath.endsWith('.tar')) {
@@ -125,6 +129,8 @@ class InitAgentEnvSupport {
 
         // tar
         def two = OneCmd.simple('ls ' + destDir)
+
+        def deploy = DeploySupport.instance
         deploy.exec(info, two)
         if (!two.ok()) {
             List<OneCmd> commandList = [OneCmd.simple('mkdir -p ' + destDir),
@@ -201,7 +207,7 @@ class InitAgentEnvSupport {
                 new OneCmd(cmd: 'su', checker: OneCmd.keyword('Password:')),
                 new OneCmd(cmd: info.rootPass, showCmdLog: false,
                         checker: OneCmd.keyword('root@').failKeyword('failure')),
-                // 200ms once 300 times -> 60s -> 1m
+                // 200ms once 600 times -> 120s -> 2m
                 new OneCmd(cmd: containerdInstallCmd, maxWaitTimes: 600,
                         checker: OneCmd.keyword('0 newly installed', 'Processing triggers', ':/home/admin')),
                 new OneCmd(cmd: clientInstallCmd, maxWaitTimes: 600,
@@ -212,6 +218,32 @@ class InitAgentEnvSupport {
             return false
         }
         addStep(info, 'init docker client', '', cmdList[-1])
+        cmdList.every { it.ok() }
+    }
+
+    boolean pullDockerImageList(RemoteInfo info, List<String> imageList) {
+        if (!info.rootPass) {
+            throw new DeployException('root password need init - ' + info.host)
+        }
+
+        def deploy = DeploySupport.instance
+        List<OneCmd> cmdList = [
+                new OneCmd(cmd: 'pwd', checker: OneCmd.keyword(info.user + '@')),
+                new OneCmd(cmd: 'su', checker: OneCmd.keyword('Password:')),
+                new OneCmd(cmd: info.rootPass, showCmdLog: false,
+                        checker: OneCmd.keyword('root@').failKeyword('failure'))
+        ]
+        for (image in imageList) {
+            // 200ms once 600 times -> 120s -> 2m
+            cmdList << new OneCmd(cmd: 'docker pull ' + image, maxWaitTimes: 600,
+                    checker: OneCmd.keyword('Downloaded newer image', 'Image is up to date'))
+        }
+
+        def isExecOk = deploy.exec(info, cmdList, 120 * imageList.size(), true)
+        if (!isExecOk) {
+            return false
+        }
+        addStep(info, 'pull docker images', imageList.toString())
         cmdList.every { it.ok() }
     }
 

@@ -7,6 +7,7 @@ import com.amazonaws.regions.Regions
 import com.amazonaws.services.ec2.AmazonEC2
 import com.amazonaws.services.ec2.AmazonEC2AsyncClient
 import com.amazonaws.services.ec2.model.*
+import com.segment.common.Conf
 import groovy.transform.CompileStatic
 import groovy.transform.Memoized
 import groovy.util.logging.Slf4j
@@ -41,8 +42,7 @@ class AwsCaller {
         }
 
         @Override
-        void refresh() {
-        }
+        void refresh() {}
     }
 
     synchronized AmazonEC2 getEc2Client(String regionName) {
@@ -130,6 +130,14 @@ class AwsCaller {
                 withTagSpecifications(tagSpec)
         def result = client.createVpc(request)
         result.vpc
+    }
+
+    Vpc getVpcById(String regionName, String vpcId) {
+        def client = getEc2Client(regionName)
+        def request = new DescribeVpcsRequest().
+                withVpcIds(vpcId)
+        def result = client.describeVpcs(request)
+        result.vpcs[0]
     }
 
     void deleteVpc(String regionName, String vpcId) {
@@ -228,6 +236,29 @@ class AwsCaller {
         client.attachInternetGateway(request)
     }
 
+    InternetGateway getInternetGatewayByVpcId(String regionName, String vpcId) {
+        def client = getEc2Client(regionName)
+        def request = new DescribeInternetGatewaysRequest().
+                withFilters(new Filter('attachment.vpc-id').withValues(vpcId))
+        def result = client.describeInternetGateways(request)
+        result.internetGateways[0]
+    }
+
+    void detachInternetGateway(String regionName, String vpcId, String gatewayId) {
+        def client = getEc2Client(regionName)
+        def request = new DetachInternetGatewayRequest().
+                withVpcId(vpcId).
+                withInternetGatewayId(gatewayId)
+        client.detachInternetGateway(request)
+    }
+
+    void deleteInternetGateway(String regionName, String gatewayId) {
+        def client = getEc2Client(regionName)
+        def request = new DeleteInternetGatewayRequest().
+                withInternetGatewayId(gatewayId)
+        client.deleteInternetGateway(request)
+    }
+
     List<Subnet> listSubnet(String regionName, String vpcId) {
         def client = getEc2Client(regionName)
         def request = new DescribeSubnetsRequest().
@@ -248,8 +279,7 @@ class AwsCaller {
         }
         def subnet = list[0]
         if (subnet.availabilityZone != zone) {
-            throw new IllegalStateException('subnet with the cidr block already exists: ' +
-                    cidrBlock + ' but zone not match: ' + zone)
+            throw new IllegalStateException('subnet with the cidr block already exists: ' + cidrBlock + ' but zone not match: ' + zone)
         }
         subnet
     }
@@ -302,14 +332,38 @@ class AwsCaller {
         result.keyPair
     }
 
-    Instance runEc2Instance(String regionName, RunInstancesRequest request, boolean isWaitUntilRunning = false) {
+    KeyPairInfo getKeyPair(String regionName, String keyName) {
+        def client = getEc2Client(regionName)
+        def request = new DescribeKeyPairsRequest().
+                withKeyNames(keyName)
+        def result = client.describeKeyPairs(request)
+        def list = result.keyPairs
+        if (!list) {
+            return null
+        }
+        list[0]
+    }
+
+    Instance runEc2Instance(String regionName, RunInstancesRequest request) {
         def client = getEc2Client(regionName)
         def result = client.runInstances(request)
-        if (isWaitUntilRunning) {
-            def waiters = client.waiters()
-            waiters.instanceRunning()
-        }
         result.reservation.instances[0]
+    }
+
+    Instance getEc2InstanceById(String regionName, String instanceId) {
+        def client = getEc2Client(regionName)
+        def request = new DescribeInstancesRequest().
+                withInstanceIds(instanceId)
+        def result = client.describeInstances(request)
+        def list = result.reservations
+        if (!list) {
+            return null
+        }
+        def instances = list[0].instances
+        if (!instances) {
+            return null
+        }
+        instances[0]
     }
 
     Instance getEc2Instance(String regionName, String name) {
@@ -328,11 +382,11 @@ class AwsCaller {
         instances[0]
     }
 
-    List<InstanceStateChange> stopEc2Instance(String regionName, String instanceId) {
+    InstanceStateChange stopEc2Instance(String regionName, String instanceId) {
         def client = getEc2Client(regionName)
         def request = new StopInstancesRequest().withInstanceIds(instanceId)
         def result = client.stopInstances(request)
-        result.stoppingInstances
+        result.stoppingInstances[0]
     }
 
     List<InstanceStateChange> terminateEc2Instance(String regionName, String instanceId) {
@@ -352,6 +406,34 @@ class AwsCaller {
             return null
         }
         result.instanceStatuses[0]
+    }
+
+    /*
+0 : pending
+16 : running
+32 : shutting-down
+48 : terminated
+64 : stopping
+80 : stopped
+     */
+
+    boolean waitUntilInstanceStateCode(String regionName, String instanceId, int targetStateCode) {
+        def itemValueWaitTimes = Conf.instance.getInt('ec2.launch.wait.times', 12)
+        // 2min
+        int maxWaitTimes = itemValueWaitTimes ? itemValueWaitTimes as int : 12
+        int count = 0
+        while (count <= maxWaitTimes) {
+            count++
+            Thread.currentThread().sleep(10000)
+
+            def stateCode = getEc2InstanceStatus(regionName, instanceId)
+            if (targetStateCode == stateCode) {
+                return true
+            } else {
+                log.info 'instance state is not match yet. instance id: {}, current state: {}', instanceId, stateCode
+            }
+        }
+        false
     }
 
     List<Instance> listInstance(String regionName, String vpcId) {
