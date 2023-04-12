@@ -47,7 +47,7 @@ def dbDataFile = c.getString('db.data.file', c.projectPath('/dms-aws-tools-data'
 def ds = Ds.h2LocalWithPool(dbDataFile, 'default_ds')
 def d = new D(ds, new MySQLDialect())
 // check if need create table first
-List<String> tableNameList = d.query("show tables", String).collect { it.toUpperCase() }
+List<String> tableNameList = d.query("SELECT table_name FROM INFORMATION_SCHEMA.TABLES", String).collect { it.toUpperCase() }
 if (!('MONT_EVENT' in tableNameList)) {
     def ddl = '''
 create table mont_aws_resource (
@@ -116,10 +116,12 @@ options.addOption('s', 'subnetId', true, '--subnetId=subnetId')
 options.addOption('b', 'cidrBlock', true, '--cidrBlock=10.1.0.0/16')
 options.addOption('k', 'keyword', true, 'for filter, eg. --keyword=c3.')
 options.addOption('e', 'ec2', true, 'launch ec2 instance')
-options.addOption('p', 'publicIpv4', false, 'set true if launch ec2 instance with a public ipv4')
+options.addOption('E', 'ec2Init', false, 'init ec2 instance, use with --instanceId and --type')
 options.addOption('m', 'imageId', true, 'image id')
 options.addOption('i', 'instanceType', true, 'instance type')
-options.addOption('j', 'join', true, 'join dms cluster, eg. --join=10.1.0.23')
+options.addOption('I', 'instanceId', true, 'instance id')
+options.addOption('D', 'delete', false,
+        'delete aws resource, use with --type and --vpcId or --subnetId or --instanceId')
 options.addOption('H', 'help', false, 'args help')
 options.addOption('Q', 'quit', false, 'quit console')
 options.addOption('x', 'x_session_current_variables', false, 'view args for reuse in current session')
@@ -127,11 +129,16 @@ options.addOption('x', 'x_session_current_variables', false, 'view args for reus
 def formatter = new HelpFormatter()
 formatter.printHelp('please input follow args to run task', options)
 println '----- begin console interact -----'
+println 'input .. to reuse latest line input'
 
 String globalRegion = c.get('region')
 String globalAz
 String globalVpcId
 String globalSubnetId
+String globalImageId = c.get('default.image.id')
+String globalInstanceType = c.get('default.instance.type')
+
+String lastLine
 
 def parser = new DefaultParser()
 
@@ -146,8 +153,24 @@ while (true) {
         println 'java -jar dms-aws-tools-1.0.jar'
         println 'you mean --help?'
         continue
-    } else if (line.startsWith('-') || line.startsWith('--')) {
-        String finalLine = line
+    } else if (line.startsWith('..') || line.startsWith('-') || line.startsWith('--')) {
+        def lineArgs = line.split(' ')
+        boolean needReplaceLastLine = false
+        for (int i = 0; i < lineArgs.length; i++) {
+            def arg = lineArgs[i]
+            if ('..' == arg) {
+                lineArgs[i] = lastLine
+                needReplaceLastLine = true
+            }
+        }
+
+        String finalLine
+        if (needReplaceLastLine) {
+            finalLine = lineArgs.join(' ')
+            println finalLine
+        } else {
+            finalLine = line
+        }
 
         if (globalRegion && !finalLine.contains('-r=') && !finalLine.contains('--region=')) {
             finalLine += (' -r=' + globalRegion)
@@ -161,7 +184,14 @@ while (true) {
         if (globalSubnetId && !finalLine.contains('-s=') && !finalLine.contains('--subnet=')) {
             finalLine += (' -s=' + globalSubnetId)
         }
+        if (globalImageId && !finalLine.contains('-m=') && !finalLine.contains('--imageId=')) {
+            finalLine += (' -m=' + globalImageId)
+        }
+        if (globalInstanceType && !finalLine.contains('-i=') && !finalLine.contains('--instanceType=')) {
+            finalLine += (' -i=' + globalInstanceType)
+        }
 
+        lastLine = finalLine
         CommandLine cmd
         try {
             cmd = parser.parse(options, finalLine.split(' '))
@@ -173,6 +203,7 @@ while (true) {
             if (cmd.hasOption('help')) {
                 formatter.printHelp('please input follow args to run task', options)
                 println '----- begin console interact -----'
+                println 'input .. to reuse latest line input'
                 continue
             }
         } catch (Exception e) {
@@ -196,11 +227,21 @@ while (true) {
             globalSubnetId = cmd.getOptionValue('subnetId')
         }
 
+        if (cmd.hasOption('imageId')) {
+            globalImageId = cmd.getOptionValue('imageId')
+        }
+
+        if (cmd.hasOption('instanceType')) {
+            globalInstanceType = cmd.getOptionValue('instanceType')
+        }
+
         if (cmd.hasOption('x_session_current_variables')) {
             println 'region: '.padRight(20, ' ') + globalRegion
             println 'az: '.padRight(20, ' ') + globalAz
             println 'vpc id: '.padRight(20, ' ') + globalVpcId
             println 'subnet id: '.padRight(20, ' ') + globalSubnetId
+            println 'image id: '.padRight(20, ' ') + globalImageId
+            println 'instance type: '.padRight(20, ' ') + globalInstanceType
             continue
         }
 
