@@ -51,7 +51,7 @@ ec2
     def manager = AwsResourceManager.instance
     def keyPair = manager.getKeyPair(region, vpcId, keyName)
 
-    def groupId = caller.getDefaultSg(region, vpcId)
+    def groupId = caller.getDefaultGroupId(region, vpcId)
 
     def isNeedPublicIp = cmd.hasOption('publicIpv4')
     def networkInterface = new InstanceNetworkInterfaceSpecification().

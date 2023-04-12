@@ -2,6 +2,8 @@ package cli.runner
 
 import aws.AwsCaller
 import cli.TablePrinter
+import model.MontAwsResourceDTO
+import org.segment.d.Record
 import org.slf4j.LoggerFactory
 
 def h = cli.CommandTaskRunnerHolder.instance
@@ -134,6 +136,17 @@ list
         for (one in filterList) {
             log.info one.toString()
         }
+        return
+    }
+
+    if ('localAwsResource' == type) {
+        def list = new MontAwsResourceDTO().noWhere().loadList()
+        if (!list) {
+            log.warn 'no local aws resource found'
+            return
+        }
+
+        TablePrinter.printRecordList(list.collect { (Record) it })
         return
     }
 }

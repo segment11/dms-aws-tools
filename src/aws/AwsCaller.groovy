@@ -139,7 +139,7 @@ class AwsCaller {
         client.deleteVpc(request)
     }
 
-    String getDefaultSg(String regionName, String vpcId) {
+    String getDefaultGroupId(String regionName, String vpcId) {
         def client = getEc2Client(regionName)
         def request = new DescribeSecurityGroupsRequest().
                 withFilters(new Filter('vpc-id').withValues(vpcId))
@@ -185,12 +185,12 @@ class AwsCaller {
         }
     }
 
-    RouteTable getDefaultRouteTable(String regionName, String vpcId) {
+    String getDefaultRouteTableId(String regionName, String vpcId) {
         def client = getEc2Client(regionName)
         def request = new DescribeRouteTablesRequest().
                 withFilters(new Filter('vpc-id').withValues(vpcId))
         def result = client.describeRouteTables(request)
-        result.routeTables[0]
+        result.routeTables[0].routeTableId
     }
 
     Boolean createRouteByGateway(String regionName, String routeTableId, String cidrBlock, String gatewayId) {

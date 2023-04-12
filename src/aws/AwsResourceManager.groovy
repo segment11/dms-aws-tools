@@ -68,8 +68,8 @@ class AwsResourceManager {
         params.id = targetVpc.vpcId
         params.region = region
         params.cidrBlock = targetVpc.cidrBlock
-        params.groupId = awsCaller.getDefaultSg(region, targetVpc.vpcId)
-        params.routeTableId = awsCaller.getDefaultRouteTable(region, targetVpc.vpcId)
+        params.groupId = awsCaller.getDefaultGroupId(region, targetVpc.vpcId)
+        params.routeTableId = awsCaller.getDefaultRouteTableId(region, targetVpc.vpcId)
 
         new MontAwsResourceDTO(
                 vpcId: targetVpc.vpcId,

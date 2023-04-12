@@ -28,6 +28,7 @@ create
 
         def manager = AwsResourceManager.instance
         def vpcInfo = manager.createVpcIfNotExists(region, cidrBlock)
+        log.info 'vpc info: {}', vpcInfo
         manager.initSecurityGroupRules(vpcInfo, proxyPort)
 
         def igwId = manager.addInternetGateway(vpcInfo)
