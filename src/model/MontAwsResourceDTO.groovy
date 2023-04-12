@@ -19,8 +19,6 @@ class MontAwsResourceDTO extends BaseRecord<MontAwsResourceDTO> {
 
     String vpcId
 
-    String awsAccountId
-
     String arn
 
     String type

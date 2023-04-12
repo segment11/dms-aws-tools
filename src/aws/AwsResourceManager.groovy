@@ -216,6 +216,7 @@ class AwsResourceManager {
                 referArn: vpcId,
                 subKey: subKey).add()
 
+        log.warn 'attach igw: {} to vpc: {}', igwId, vpcId
         awsCaller.attachInternetGateway(region, vpcId, igwId)
         igwId
     }

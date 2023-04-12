@@ -120,12 +120,13 @@ options.addOption('p', 'publicIpv4', false, 'set true if launch ec2 instance wit
 options.addOption('m', 'imageId', true, 'image id')
 options.addOption('i', 'instanceType', true, 'instance type')
 options.addOption('j', 'join', true, 'join dms cluster, eg. --join=10.1.0.23')
+options.addOption('H', 'help', false, 'args help')
+options.addOption('Q', 'quit', false, 'quit console')
 options.addOption('x', 'x_session_current_variables', false, 'view args for reuse in current session')
 
 def formatter = new HelpFormatter()
 formatter.printHelp('please input follow args to run task', options)
 println '----- begin console interact -----'
-println 'input .. to reuse latest line input'
 
 String globalRegion = c.get('region')
 String globalAz
@@ -172,7 +173,6 @@ while (true) {
             if (cmd.hasOption('help')) {
                 formatter.printHelp('please input follow args to run task', options)
                 println '----- begin console interact -----'
-                println 'input .. to reuse latest line input'
                 continue
             }
         } catch (Exception e) {

@@ -31,6 +31,11 @@ create
         manager.initSecurityGroupRules(vpcInfo, proxyPort)
 
         def igwId = manager.addInternetGateway(vpcInfo)
+
+        def waitSeconds = Conf.instance.getInt('igw.attached.wait.seconds', 5)
+        log.warn 'wait after attach new igw, seconds: {}', waitSeconds
+        Thread.sleep(waitSeconds * 1000)
+
         manager.addIgwRoute(region, vpcInfo.id, vpcInfo.routeTableId, igwId)
 
         return
