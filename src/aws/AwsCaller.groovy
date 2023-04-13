@@ -418,7 +418,7 @@ class AwsCaller {
      */
 
     boolean waitUntilInstanceStateCode(String regionName, String instanceId, int targetStateCode) {
-        def itemValueWaitTimes = Conf.instance.getInt('ec2.launch.wait.times', 12)
+        def itemValueWaitTimes = Conf.instance.getInt('ec2.state.change.wait.times', 12)
         // 2min
         int maxWaitTimes = itemValueWaitTimes ? itemValueWaitTimes as int : 12
         int count = 0
