@@ -135,6 +135,7 @@ String globalRegion = c.get('region')
 String globalAz
 String globalVpcId
 String globalSubnetId
+String globalInstanceId
 String globalImageId = c.get('default.image.id')
 String globalInstanceType = c.get('default.instance.type')
 
@@ -178,10 +179,13 @@ while (true) {
         if (globalAz && !finalLine.contains('-a=') && !finalLine.contains('--az=')) {
             finalLine += (' -a=' + globalAz)
         }
-        if (globalVpcId && !finalLine.contains('-v=') && !finalLine.contains('--vpc=')) {
+        if (globalVpcId && !finalLine.contains('-v=') && !finalLine.contains('--vpcId=')) {
             finalLine += (' -v=' + globalVpcId)
         }
-        if (globalSubnetId && !finalLine.contains('-s=') && !finalLine.contains('--subnet=')) {
+        if (globalSubnetId && !finalLine.contains('-s=') && !finalLine.contains('--subnetId=')) {
+            finalLine += (' -s=' + globalSubnetId)
+        }
+        if (globalInstanceId && !finalLine.contains('-I=') && !finalLine.contains('--instanceId=')) {
             finalLine += (' -s=' + globalSubnetId)
         }
         if (globalImageId && !finalLine.contains('-m=') && !finalLine.contains('--imageId=')) {
@@ -227,6 +231,10 @@ while (true) {
             globalSubnetId = cmd.getOptionValue('subnetId')
         }
 
+        if (cmd.hasOption('instanceId')) {
+            globalInstanceId = cmd.getOptionValue('instanceId')
+        }
+
         if (cmd.hasOption('imageId')) {
             globalImageId = cmd.getOptionValue('imageId')
         }
@@ -240,6 +248,7 @@ while (true) {
             println 'az: '.padRight(20, ' ') + globalAz
             println 'vpc id: '.padRight(20, ' ') + globalVpcId
             println 'subnet id: '.padRight(20, ' ') + globalSubnetId
+            println 'instance id: '.padRight(20, ' ') + globalInstanceId
             println 'image id: '.padRight(20, ' ') + globalImageId
             println 'instance type: '.padRight(20, ' ') + globalInstanceType
             continue
