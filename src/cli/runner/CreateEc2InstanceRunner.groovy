@@ -7,6 +7,7 @@ import com.segment.common.Conf
 import common.Event
 import ex.AwsResourceCreateException
 import org.slf4j.LoggerFactory
+import support.CacheSession
 
 def h = cli.CommandTaskRunnerHolder.instance
 def log = LoggerFactory.getLogger(this.getClass())
@@ -19,10 +20,21 @@ ec2
     }
 } { cmd ->
     def region = cmd.getOptionValue('region')
-    def vpcId = cmd.getOptionValue('vpcId')
-    def subnetId = cmd.getOptionValue('subnetId')
-    if (!vpcId || !subnetId) {
+    def vpcIdShort = cmd.getOptionValue('vpcId')
+    def subnetIdShort = cmd.getOptionValue('subnetId')
+    if (!vpcIdShort || !subnetIdShort) {
         log.warn 'vpcId and subnetId required'
+        return
+    }
+
+    def vpcId = CacheSession.instance.vpcList.find { it.vpcId.endsWith(vpcIdShort) }?.vpcId
+    if (!vpcId) {
+        log.warn 'no vpc id match found'
+        return
+    }
+    def subnetId = CacheSession.instance.subnetList.find { it.subnetId.endsWith(subnetIdShort) }?.subnetId
+    if (!subnetId) {
+        log.warn 'no subnet id match found'
         return
     }
 

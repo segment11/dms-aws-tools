@@ -1,17 +1,16 @@
 package support
 
+import com.amazonaws.services.ec2.model.Instance
+import com.amazonaws.services.ec2.model.Subnet
+import com.amazonaws.services.ec2.model.Vpc
 import groovy.transform.CompileStatic
 
 @CompileStatic
 @Singleton
 class CacheSession {
-    Map<String, Object> cached = [:]
+    List<Vpc> vpcList = []
 
-    void put(String key, Object val) {
-        cached[key] = val
-    }
+    List<Subnet> subnetList = []
 
-    Object get(String key) {
-        cached[key]
-    }
+    List<Instance> instanceList = []
 }

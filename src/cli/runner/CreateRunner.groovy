@@ -6,6 +6,7 @@ import com.segment.common.Conf
 import model.MontAwsResourceDTO
 import model.json.ExtendParams
 import org.slf4j.LoggerFactory
+import support.CacheSession
 
 def h = cli.CommandTaskRunnerHolder.instance
 def log = LoggerFactory.getLogger(this.getClass())
@@ -43,11 +44,17 @@ create
 
     if ('subnet' == type) {
         def region = cmd.getOptionValue('region')
-        def vpcId = cmd.getOptionValue('vpcId')
+        def vpcIdShort = cmd.getOptionValue('vpcId')
         def cidrBlock = cmd.getOptionValue('cidrBlock')
         def az = cmd.getOptionValue('az')
-        if (!vpcId || !cidrBlock || !az) {
+        if (!vpcIdShort || !cidrBlock || !az) {
             log.warn 'vpcId, cidrBlock and az required'
+            return
+        }
+
+        def vpcId = CacheSession.instance.vpcList.find { it.vpcId.endsWith(vpcIdShort) }?.vpcId
+        if (!vpcId) {
+            log.warn 'no vpc id match found'
             return
         }
 
@@ -59,9 +66,15 @@ create
 
     if ('keyPairLocal' == type) {
         def region = cmd.getOptionValue('region')
-        def vpcId = cmd.getOptionValue('vpcId')
-        if (!vpcId) {
+        def vpcIdShort = cmd.getOptionValue('vpcId')
+        if (!vpcIdShort) {
             log.warn 'vpcId required'
+            return
+        }
+
+        def vpcId = CacheSession.instance.vpcList.find { it.vpcId.endsWith(vpcIdShort) }?.vpcId
+        if (!vpcId) {
+            log.warn 'no vpc id match found'
             return
         }
 

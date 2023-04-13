@@ -5,6 +5,7 @@ import cli.TablePrinter
 import model.MontAwsResourceDTO
 import org.segment.d.Record
 import org.slf4j.LoggerFactory
+import support.CacheSession
 
 def h = cli.CommandTaskRunnerHolder.instance
 def log = LoggerFactory.getLogger(this.getClass())
@@ -48,6 +49,8 @@ list
             return
         }
 
+        CacheSession.instance.vpcList = list
+
         List<List<String>> table = []
         List<String> header = ['vpc id', 'cidr block', 'state']
         table << header
@@ -61,9 +64,15 @@ list
 
     if ('subnet' == type) {
         def region = cmd.getOptionValue('region')
-        def vpcId = cmd.getOptionValue('vpcId')
-        if (!vpcId) {
+        def vpcIdShort = cmd.getOptionValue('vpcId')
+        if (!vpcIdShort) {
             log.warn 'no vpc id given'
+            return
+        }
+
+        def vpcId = CacheSession.instance.vpcList.find { it.vpcId.endsWith(vpcIdShort) }?.vpcId
+        if (!vpcId) {
+            log.warn 'no vpc id match found'
             return
         }
 
@@ -72,6 +81,8 @@ list
             log.warn 'no subnet found'
             return
         }
+
+        CacheSession.instance.subnetList = list
 
         List<List<String>> table = []
         List<String> header = ['subnet id', 'cidr block', 'az', 'state']
@@ -86,9 +97,15 @@ list
 
     if ('instance' == type) {
         def region = cmd.getOptionValue('region')
-        def vpcId = cmd.getOptionValue('vpcId')
-        if (!vpcId) {
+        def vpcIdShort = cmd.getOptionValue('vpcId')
+        if (!vpcIdShort) {
             log.warn 'no vpc id given'
+            return
+        }
+
+        def vpcId = CacheSession.instance.vpcList.find { it.vpcId.endsWith(vpcIdShort) }?.vpcId
+        if (!vpcId) {
+            log.warn 'no vpc id match found'
             return
         }
 
@@ -97,6 +114,8 @@ list
             log.warn 'no instance found'
             return
         }
+
+        CacheSession.instance.instanceList = list
 
         List<List<String>> table = []
         List<String> header = ['instance id', 'instance type', 'state', 'private ip', 'public ip']

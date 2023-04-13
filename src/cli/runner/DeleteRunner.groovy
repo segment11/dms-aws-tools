@@ -2,6 +2,7 @@ package cli.runner
 
 import aws.AwsCaller
 import org.slf4j.LoggerFactory
+import support.CacheSession
 
 def h = cli.CommandTaskRunnerHolder.instance
 def log = LoggerFactory.getLogger(this.getClass())
@@ -18,7 +19,18 @@ delete
 
     if ('vpc' == type) {
         def region = cmd.getOptionValue('region')
-        def vpcId = cmd.getOptionValue('vpcId')
+        def vpcIdShort = cmd.getOptionValue('vpcId')
+        if (!vpcIdShort) {
+            log.warn 'no vpc id given'
+            return
+        }
+
+        def vpcId = CacheSession.instance.vpcList.find { it.vpcId.endsWith(vpcIdShort) }?.vpcId
+        if (!vpcId) {
+            log.warn 'no vpc id match found'
+            return
+        }
+
         def vpc = caller.getVpcById(region, vpcId)
         if (!vpc) {
             log.warn 'no vpc found'
@@ -48,9 +60,15 @@ delete
 
     if ('subnet' == type) {
         def region = cmd.getOptionValue('region')
-        def subnetId = cmd.getOptionValue('subnetId')
-        if (!subnetId) {
+        def subnetIdShort = cmd.getOptionValue('subnetId')
+        if (!subnetIdShort) {
             log.warn 'no subnet id given'
+            return
+        }
+
+        def subnetId = CacheSession.instance.subnetList.find { it.subnetId.endsWith(subnetIdShort) }?.subnetId
+        if (!subnetId) {
+            log.warn 'no subnet id match found'
             return
         }
 
@@ -61,8 +79,8 @@ delete
         }
 
         // check if has any ec2 instance
-        def ec2List = caller.listInstance(region, subnet.vpcId)
-        if (ec2List.any {
+        def ec2InstanceList = caller.listInstance(region, subnet.vpcId)
+        if (ec2InstanceList && ec2InstanceList.any {
             it.subnetId == subnetId && it.state.code != 48
         }) {
             log.warn 'subnet has ec2 instance, please delete them first'
@@ -76,9 +94,15 @@ delete
 
     if ('instance' == type) {
         def region = cmd.getOptionValue('region')
-        def instanceId = cmd.getOptionValue('instanceId')
-        if (!instanceId) {
+        def instanceIdShort = cmd.getOptionValue('instanceId')
+        if (!instanceIdShort) {
             log.warn 'no instance id given'
+            return
+        }
+
+        def instanceId = CacheSession.instance.instanceList.find { it.instanceId.endsWith(instanceIdShort) }?.instanceId
+        if (!instanceId) {
+            log.warn 'no instance id match found'
             return
         }
 
@@ -100,7 +124,9 @@ delete
                 log.info 'instance is not stopped yet. ip: {}', ip
                 return
             }
+        }
 
+        if ('stopped' == state) {
             def result2 = caller.terminateEc2Instance(region, instanceId)
             log.info 'terminate result: {}', result2
             def isWaitOk2 = caller.waitUntilInstanceStateCode(region, instanceId, 48)

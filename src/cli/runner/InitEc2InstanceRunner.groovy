@@ -6,6 +6,7 @@ import com.segment.common.Conf
 import deploy.*
 import model.MontJobCheckDTO
 import org.slf4j.LoggerFactory
+import support.CacheSession
 
 def h = cli.CommandTaskRunnerHolder.instance
 def log = LoggerFactory.getLogger(this.getClass())
@@ -20,7 +21,17 @@ ec2Init
     def c = Conf.instance
 
     def region = cmd.getOptionValue('region')
-    def instanceId = cmd.getOptionValue('instanceId')
+    def instanceIdShort = cmd.getOptionValue('instanceId')
+    if (!instanceIdShort) {
+        log.warn 'instanceId required'
+        return
+    }
+
+    def instanceId = CacheSession.instance.instanceList.find { it.instanceId.endsWith(instanceIdShort) }?.instanceId
+    if (!instanceId) {
+        log.warn 'no instance id match found'
+        return
+    }
 
     def ec2Instance = AwsCaller.instance.getEc2InstanceById(region, instanceId)
     if (!ec2Instance) {
