@@ -37,7 +37,7 @@ class TablePrinter {
 
         List<Integer> maxLengths = []
         for (i in 0..<first.size()) {
-            maxLengths << table.collect { it[i] }.max { it.length() }.length()
+            maxLengths << table.collect { it[i] }.max { it == null ? 0 : it.length() }.length()
         }
 
         def sbRow = new StringBuilder()
@@ -57,7 +57,7 @@ class TablePrinter {
             for (i in 0..<first.size()) {
                 def maxLength = maxLengths[i]
                 def val = row[i]
-                sb << ' ' + val.padRight(maxLength + 1, ' ')
+                sb << ' ' + (val == null ? 'null' : val).padRight(maxLength + 1, ' ')
                 sb << '|'
             }
             sb << '\n'
