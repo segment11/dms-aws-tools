@@ -7,8 +7,6 @@ import deploy.*
 import model.MontJobCheckDTO
 import org.slf4j.LoggerFactory
 
-import static deploy.InitAgentEnvSupport.*
-
 def h = cli.CommandTaskRunnerHolder.instance
 def log = LoggerFactory.getLogger(this.getClass())
 
@@ -52,9 +50,9 @@ ec2Init
     info.privateKeySuffix = '.pem'
     info.privateKeyContent = keyPair.keyMaterial
 
-    def support = new InitAgentEnvSupport()
+    def support = new InitAgentEnvSupport(info)
     MontJobCheckDTO.doJobOnce('ec2-reset-root-password-' + publicIpv4) {
-        def r = support.resetRootPassword(info)
+        def r = support.resetRootPassword()
         if (!r) {
             log.warn 'reset root password fail'
             return false
@@ -62,23 +60,23 @@ ec2Init
             return true
         }
     }
-    info.rootPass = INIT_ROOT_PASS
+    info.rootPass = support.initRootPass
 
     def type = cmd.getOptionValue('type')
     if ('tar' == type) {
         List<OneCmd> cmdList = []
-        cmdList << new OneCmd(cmd: 'wget -N https://www.montplex.com/static-dl/docker.tar -O ' + DOCKER_RUNTIME_FILE, checker: OneCmd.keyword('saved'))
-        cmdList << new OneCmd(cmd: 'wget -N https://www.montplex.com/static-dl/jdk8.tar.gz -O ' + JDK_FILE, checker: OneCmd.keyword('saved'))
-        cmdList << new OneCmd(cmd: 'wget -N https://www.montplex.com/static-dl/agentV1.tar.gz -O ' + JDK_FILE, checker: OneCmd.keyword('saved'))
+        cmdList << new OneCmd(cmd: 'wget -N https://www.montplex.com/static-dl/docker.tar -O ' + support.dockerTarFile, checker: OneCmd.keyword('saved'))
+        cmdList << new OneCmd(cmd: 'wget -N https://www.montplex.com/static-dl/jdk8.tar.gz -O ' + support.jdkTarFile, checker: OneCmd.keyword('saved'))
+        cmdList << new OneCmd(cmd: 'wget -N https://www.montplex.com/static-dl/agentV1.tar.gz -O ' + support.agentTarFile, checker: OneCmd.keyword('saved'))
 
         def deploy = DeploySupport.instance
         def result = deploy.exec(info, cmdList, 3 * 60, true)
         log.info 'wget files result: {}', result
 
-        if (!support.unTar(info, JDK_FILE)) {
+        if (!support.unTar(support.jdkTarFile)) {
             log.warn 'un tar jdk fail'
         }
-        if (!support.unTar(info, AGENT_FILE)) {
+        if (!support.unTar(support.agentTarFile)) {
             log.warn 'un tar agent fail'
         }
         return
@@ -100,7 +98,7 @@ localIpFilterPre=${privateIpPrefix}
         log.info 'send dms.conf.properties success'
 
         // pull dms docker image
-        if (!support.pullDockerImageList(info, ['key232323/dms:latest'])) {
+        if (!support.pullDockerImageList(['key232323/dms:latest'])) {
             log.warn 'pull dms docker image fail'
             return
         }
@@ -134,44 +132,33 @@ docker run -d --name=dms --cpus="1" -v /home/admin/conf.properties:/opt/dms/conf
         agentConf.secret = secret
         agentConf.localIpFilterPre = ipPrivate.split(/\./)[0] + '.'
 
-        support.initAgentConf(info, agentConf)
-        support.startAgentCmd(info)
+        support.initAgentConf(agentConf)
+        support.startAgentCmd()
 
-        support.getSteps(info).each { log.info it }
-        support.clearSteps(info)
         return
     }
 
     if ('docker' == type) {
-        if (!support.unTar(info, DOCKER_RUNTIME_FILE)) {
+        if (!support.unTar(support.dockerTarFile)) {
             return false
         }
 
-        support.getSteps(info).each { log.info it }
-        support.clearSteps(info)
-
-        if (!support.initDockerClient(info)) {
+        if (!support.initDockerClient()) {
             log.warn 'init docker client fail'
             return
         }
 
-        support.getSteps(info).each { log.info it }
-        support.clearSteps(info)
-
-        if (!support.initDockerDaemon(info)) {
+        if (!support.initDockerDaemon()) {
             log.warn 'init docker daemon fail'
             return
         }
-
-        support.getSteps(info).each { log.info it }
-        support.clearSteps(info)
 
         return
     }
 
     if ('dockerImage' == type) {
         List<String> imageList = ['key232323/zookeeper:3.6.4']
-        if (!support.pullDockerImageList(info, imageList)) {
+        if (!support.pullDockerImageList(imageList)) {
             log.warn 'pull docker image fail'
             return
         }
