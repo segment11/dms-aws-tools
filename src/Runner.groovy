@@ -116,6 +116,7 @@ options.addOption('s', 'subnetId', true, '--subnetId=subnetId')
 options.addOption('b', 'cidrBlock', true, '--cidrBlock=10.1.0.0/16')
 options.addOption('k', 'keyword', true, 'for filter, eg. --keyword=c3.')
 options.addOption('e', 'ec2', true, 'launch ec2 instance')
+options.addOption('p', 'publicIpv4', false, 'set true if launch ec2 instance with a public ipv4')
 options.addOption('E', 'ec2Init', false, 'init ec2 instance, use with --instanceId and --type')
 options.addOption('m', 'imageId', true, 'image id')
 options.addOption('i', 'instanceType', true, 'instance type')
@@ -186,7 +187,7 @@ while (true) {
             finalLine += (' -s=' + globalSubnetId)
         }
         if (globalInstanceId && !finalLine.contains('-I=') && !finalLine.contains('--instanceId=')) {
-            finalLine += (' -s=' + globalSubnetId)
+            finalLine += (' -I=' + globalInstanceId)
         }
         if (globalImageId && !finalLine.contains('-m=') && !finalLine.contains('--imageId=')) {
             finalLine += (' -m=' + globalImageId)

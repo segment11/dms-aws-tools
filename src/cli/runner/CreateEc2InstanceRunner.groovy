@@ -63,7 +63,7 @@ ec2
     def groupId = caller.getDefaultGroupId(region, vpcId)
 
     def networkInterface = new InstanceNetworkInterfaceSpecification().
-            withAssociatePublicIpAddress(true).
+            withAssociatePublicIpAddress(cmd.hasOption('publicIpv4')).
             withDeleteOnTermination(true).
             withGroups(groupId).
             withSubnetId(subnetId).

@@ -48,13 +48,11 @@ ec2Init
     }
 
     def publicIpv4 = ec2Instance.publicIpAddress
-    if (!publicIpv4) {
-        log.warn 'instance not has public ip'
-        return
-    }
+    def privateIpv4 = ec2Instance.privateIpAddress
 
     def info = new RemoteInfo()
-    info.host = publicIpv4
+    // public ip is limited, so use private ip, run this tool in the same vpc
+    info.host = publicIpv4 ?: privateIpv4
     info.port = 22
     info.user = 'admin'
     info.isUsePass = false
@@ -62,7 +60,7 @@ ec2Init
     info.privateKeyContent = keyPair.keyMaterial
 
     def support = new InitAgentEnvSupport(info)
-    MontJobCheckDTO.doJobOnce('ec2-reset-root-password-' + publicIpv4) {
+    MontJobCheckDTO.doJobOnce('ec2-reset-root-password-' + privateIpv4) {
         def r = support.resetRootPassword()
         if (!r) {
             log.warn 'reset root password fail'
@@ -116,18 +114,12 @@ localIpFilterPre=${privateIpPrefix}
 
         c.put('dms.cluster.host', ipPrivate)
 
-        List<OneCmd> cmdList = [
-                new OneCmd(cmd: 'pwd', checker: OneCmd.keyword(info.user + '@')),
-                new OneCmd(cmd: 'su', checker: OneCmd.keyword('Password:')),
-                new OneCmd(cmd: info.rootPass, showCmdLog: false,
-                        checker: OneCmd.keyword('root@').failKeyword('failure'))
-        ]
         def startDmsServerCmd = """
 docker run -d --name=dms --cpus="1" -v /home/admin/conf.properties:/opt/dms/conf.properties -v /opt/log:/opt/log -v /data/dms:/data/dms --net=host key232323/dms
 """
-        cmdList << new OneCmd(cmd: startDmsServerCmd, checker: OneCmd.any())
+        def commandList = support.cmdAsRoot new OneCmd(cmd: startDmsServerCmd, checker: OneCmd.any())
 
-        def result = deploy.exec(info, cmdList, 10, true)
+        def result = deploy.exec(info, commandList, 10, true)
         log.info 'start dms server result: {}', result
         return
     }
@@ -163,6 +155,11 @@ docker run -d --name=dms --cpus="1" -v /home/admin/conf.properties:/opt/dms/conf
             log.warn 'init docker daemon fail'
             return
         }
+
+        def commandList = support.cmdAsRoot new OneCmd(cmd: '/usr/sbin/usermod -a -G docker admin', checker: OneCmd.any())
+        def deploy = DeploySupport.instance
+        def result = deploy.exec(info, commandList, 10, true)
+        log.info 'add admin to group docker result: {}', result
 
         return
     }
