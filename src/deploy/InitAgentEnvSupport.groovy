@@ -152,7 +152,7 @@ class InitAgentEnvSupport {
         String destDockerDir = dockerTarFile.replace('.tar', '')
         def engineInstallCmd = "apt install -y ${destDockerDir}/docker-ce_20.10.21_3-0_debian-bullseye_amd64.deb".toString()
 
-        List<OneCmd> finalCommandList = cmdAsRoot new OneCmd(cmd: engineInstallCmd, maxWaitTimes: 600,
+        List<OneCmd> finalCommandList = cmdAsRoot new OneCmd(cmd: engineInstallCmd, maxWaitTimes: 1200,
                 checker: OneCmd.keyword('0 newly installed', 'Processing triggers', ':/home/admin')),
                 new OneCmd(cmd: 'systemctl enable docker.service', checker: OneCmd.any())
 
@@ -180,7 +180,7 @@ class InitAgentEnvSupport {
         // 200ms once 600 times -> 120s -> 2m
         List<OneCmd> commandList = cmdAsRoot new OneCmd(cmd: containerdInstallCmd, maxWaitTimes: 600,
                 checker: OneCmd.keyword('0 newly installed', 'Processing triggers', ':/home/admin')),
-                new OneCmd(cmd: clientInstallCmd, maxWaitTimes: 600,
+                new OneCmd(cmd: clientInstallCmd, maxWaitTimes: 1200,
                         checker: OneCmd.keyword('0 newly installed', 'Processing triggers', ':/home/admin'))
 
         def isExecOk = deploy.exec(info, commandList, 1200, true)
