@@ -442,7 +442,7 @@ class AwsCaller {
                 withFilters(new Filter('vpc-id').withValues(vpcId))
         def result = client.describeInstances(request)
         if (!result.reservations) {
-            return null
+            return []
         }
 
         List<Instance> list = []

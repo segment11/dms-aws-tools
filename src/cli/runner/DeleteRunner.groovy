@@ -80,7 +80,7 @@ delete
 
         // check if has any ec2 instance
         def ec2InstanceList = caller.listInstance(region, subnet.vpcId)
-        if (ec2InstanceList && ec2InstanceList.any {
+        if (ec2InstanceList.any {
             it.subnetId == subnetId && it.state.code != 48
         }) {
             log.warn 'subnet has ec2 instance, please delete them first'
