@@ -71,7 +71,9 @@ class OneCmd {
 
         int count = 0
         while (true) {
-            log.info 'wait a while'
+            if (count % 10 == 0) {
+                log.info 'wait a while'
+            }
             Thread.sleep(waitMsOnce)
             count++
             if (count > maxWaitTimes) {
