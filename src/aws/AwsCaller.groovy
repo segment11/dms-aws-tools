@@ -24,6 +24,8 @@ class AwsCaller {
         this.secretKey = secretKey
     }
 
+    boolean isAliyun = false
+
     private Map<String, AmazonEC2> clientCached = new HashMap<>()
 
     @CompileStatic
@@ -45,7 +47,7 @@ class AwsCaller {
         void refresh() {}
     }
 
-    synchronized AmazonEC2 getEc2Client(String regionName) {
+    private synchronized AmazonEC2 getEc2Client(String regionName) {
         def client = clientCached[regionName]
         if (client) {
             return client
@@ -64,9 +66,20 @@ class AwsCaller {
             v.shutdown()
             log.info 'done shutdown ec2 client for region {}', k
         }
+
+        if (isAliyun) {
+            AliyunCaller.instance.shutdown()
+        }
     }
 
-    static List<AwsRegion> getRegions() {
+    List<AwsRegion> getRegions() {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.getRegions()
+            return r.collect {
+                return new AwsRegion(name: it.regionId, des: it.localName)
+            }
+        }
+
         List<Regions> r = []
         for (region in Regions.values()) {
             r << region
@@ -79,31 +92,59 @@ class AwsCaller {
     }
 
     @Memoized
-    List<InstanceTypeInfo> getInstanceTypeListInRegion(String regionName) {
+    List<InstanceTypeInfo2> getInstanceTypeListInRegion(String regionName) {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.getInstanceTypeListInRegion()
+            return r.collect {
+                return new InstanceTypeInfo2(it.instanceTypeId, (it.memorySize * 1024).longValue(), it.cpuCoreCount)
+            }
+        }
+
         def client = getEc2Client(regionName)
         def request = new DescribeInstanceTypesRequest()
         def result = client.describeInstanceTypes(request)
         def r = result.instanceTypes
-        r.sort { it.instanceType }
+
+        r.collect {
+            new InstanceTypeInfo2(it.instanceType, it.memoryInfo.sizeInMiB, it.VCpuInfo.defaultVCpus)
+        }.sort { it.instanceType }
     }
 
     @Memoized
-    List<Image> getImageListInRegion(String regionName) {
+    List<ImageInfo> getImageListInRegion(String regionName) {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.getImageListInRegion(regionName)
+            return r.collect {
+                return new ImageInfo(it.imageId, it.imageName, it.architecture)
+            }
+        }
+
         def client = getEc2Client(regionName)
         def request = new DescribeImagesRequest()
         def result = client.describeImages(request)
         def r = result.images
-        r.sort { it.name }
+        r.collect {
+            new ImageInfo(it.imageId, it.name, it.architecture)
+        }.sort { it.name }
     }
 
     private Map<String, List<AvailabilityZone>> zonesCached = [:]
 
-    List<AvailabilityZone> getAvailabilityZoneList(String regionName, boolean isCache) {
-        if (isCache) {
-            def cached = zonesCached[regionName]
-            if (cached) {
-                return cached
+    List<AvailabilityZone> getAvailabilityZoneList(String regionName) {
+        if (isAliyun) {
+            // always cache
+            def r = AliyunCaller.instance.getAvailabilityZoneList(regionName)
+            return r.collect {
+                return new AvailabilityZone()
+                        .withZoneName(it.zoneId)
+                        .withState('available')
+                        .withRegionName(regionName)
             }
+        }
+
+        def cached = zonesCached[regionName]
+        if (cached) {
+            return cached
         }
 
         def client = getEc2Client(regionName)
@@ -115,12 +156,30 @@ class AwsCaller {
     }
 
     List<Vpc> listVpc(String regionName) {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.listVpc(regionName)
+            return r.collect {
+                new Vpc()
+                        .withVpcId(it.vpcId)
+                        .withCidrBlock(it.cidrBlock)
+                        .withState(it.status)
+                        .withTags(it.tags?.tag.collect { new Tag(it.key, it.value) })
+            }
+        }
+
         def client = getEc2Client(regionName)
         def result = client.describeVpcs()
         result.vpcs
     }
 
     Vpc createVpc(String regionName, String cidrBlock) {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.createVpc(regionName, cidrBlock)
+            return new Vpc()
+                    .withVpcId(r.vpcId)
+                    .withCidrBlock(cidrBlock)
+        }
+
         def client = getEc2Client(regionName)
         def tagSpec = new TagSpecification().
                 withResourceType(ResourceType.Vpc).
@@ -133,14 +192,31 @@ class AwsCaller {
     }
 
     Vpc getVpcById(String regionName, String vpcId) {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.getVpcById(regionName, vpcId)
+            return new Vpc()
+                    .withVpcId(r.vpcId)
+                    .withCidrBlock(r.cidrBlock)
+                    .withState(r.status)
+                    .withTags(r.tags?.tag.collect { new Tag(it.key, it.value) })
+        }
+
         def client = getEc2Client(regionName)
         def request = new DescribeVpcsRequest().
                 withVpcIds(vpcId)
         def result = client.describeVpcs(request)
+        if (result.vpcs.size() == 0) {
+            return null
+        }
         result.vpcs[0]
     }
 
     void deleteVpc(String regionName, String vpcId) {
+        if (isAliyun) {
+            AliyunCaller.instance.deleteVpc(regionName, vpcId)
+            return
+        }
+
         def client = getEc2Client(regionName)
         def request = new DeleteVpcRequest().
                 withVpcId(vpcId)
@@ -194,6 +270,15 @@ class AwsCaller {
     }
 
     String getDefaultRouteTableId(String regionName, String vpcId) {
+        if (isAliyun) {
+            def vpc = AliyunCaller.instance.getVpcById(regionName, vpcId)
+            def r = vpc.routerTableIds?.routerTableIds
+            if (!r) {
+                throw new IllegalStateException("vpc $vpcId has no router table")
+            }
+            return r[0]
+        }
+
         def client = getEc2Client(regionName)
         def request = new DescribeRouteTablesRequest().
                 withFilters(new Filter('vpc-id').withValues(vpcId))
@@ -222,6 +307,11 @@ class AwsCaller {
     }
 
     InternetGateway createInternetGateway(String regionName) {
+        if (isAliyun) {
+            log.warn 'aliyun does not support internet gateway'
+            return null
+        }
+
         def client = getEc2Client(regionName)
         def request = new CreateInternetGatewayRequest()
         def result = client.createInternetGateway(request)
@@ -260,6 +350,17 @@ class AwsCaller {
     }
 
     List<Subnet> listSubnet(String regionName, String vpcId) {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.listVSwitch(regionName, vpcId)
+            return r.collect {
+                new Subnet()
+                        .withSubnetId(it.vSwitchId)
+                        .withCidrBlock(it.cidrBlock)
+                        .withAvailabilityZone(it.zoneId)
+                        .withState(it.status)
+            }
+        }
+
         def client = getEc2Client(regionName)
         def request = new DescribeSubnetsRequest().
                 withFilters(new Filter('vpc-id').withValues(vpcId))
@@ -268,6 +369,18 @@ class AwsCaller {
     }
 
     Subnet getSubnet(String regionName, String vpcId, String cidrBlock, String zone) {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.getVSwitch(regionName, vpcId, cidrBlock)
+            if (!r) {
+                return null
+            }
+            return new Subnet()
+                    .withSubnetId(r.vSwitchId)
+                    .withCidrBlock(r.cidrBlock)
+                    .withAvailabilityZone(r.zoneId)
+                    .withState(r.status)
+        }
+
         def client = getEc2Client(regionName)
         def request = new DescribeSubnetsRequest().
                 withFilters(new Filter('cidr-block').withValues(cidrBlock),
@@ -285,6 +398,18 @@ class AwsCaller {
     }
 
     Subnet getSubnetById(String regionName, String subnetId) {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.getVSwitchById(regionName, subnetId)
+            if (!r) {
+                return null
+            }
+            return new Subnet()
+                    .withSubnetId(r.vSwitchId)
+                    .withCidrBlock(r.cidrBlock)
+                    .withAvailabilityZone(r.zoneId)
+                    .withState(r.status)
+        }
+
         def client = getEc2Client(regionName)
         def request = new DescribeSubnetsRequest().withSubnetIds(subnetId)
         def result = client.describeSubnets(request)
@@ -297,6 +422,15 @@ class AwsCaller {
     }
 
     Subnet createSubnet(String regionName, String vpcId, String cidrBlock, String zone) {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.createVSwitch(regionName, vpcId, cidrBlock, zone)
+            return new Subnet()
+                    .withSubnetId(r.vSwitchId)
+                    .withCidrBlock(cidrBlock)
+                    .withAvailabilityZone(zone)
+                    .withState('Pending')
+        }
+
         def client = getEc2Client(regionName)
         def request = new CreateSubnetRequest().
                 withVpcId(vpcId).
@@ -307,6 +441,11 @@ class AwsCaller {
     }
 
     void deleteSubnet(String regionName, String subnetId) {
+        if (isAliyun) {
+            AliyunCaller.instance.deleteVSwitch(regionName, subnetId)
+            return
+        }
+
         def client = getEc2Client(regionName)
         def request = new DeleteSubnetRequest().
                 withSubnetId(subnetId)

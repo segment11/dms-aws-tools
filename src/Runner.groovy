@@ -1,3 +1,4 @@
+import aws.AliyunCaller
 import aws.AwsCaller
 import cli.CommandTaskRunnerHolder
 import com.segment.common.Conf
@@ -19,10 +20,12 @@ String[] x = super.binding.getProperty('args') as String[]
 def c = Conf.instance.resetWorkDir().load().loadArgs(x)
 log.info c.toString()
 
+def cloud = c.getString('cloud', 'aws')
+
 def accessKey = c.get('accessKey')
 def secretKey = c.get('secretKey')
 if (!accessKey || !secretKey) {
-    def f = new File(c.projectPath('/aws.credential'))
+    def f = new File(c.projectPath('/' + cloud + '.credential'))
     if (!f.exists()) {
         log.warn 'accessKey and secretKey required'
         return
@@ -31,7 +34,13 @@ if (!accessKey || !secretKey) {
     accessKey = lines.find { it.contains('key_id') }.split('=')[-1].trim()
     secretKey = lines.find { it.contains('secret') }.split('=')[-1].trim()
 }
-AwsCaller.instance.init(accessKey, secretKey)
+
+def caller = AwsCaller.instance
+caller.init(accessKey, secretKey)
+caller.isAliyun = cloud == 'aliyun'
+if (caller.isAliyun) {
+    AliyunCaller.instance.init(accessKey, secretKey)
+}
 
 // check if running in jar not groovy
 def projectDir = new File(c.projectPath('/'))
@@ -274,5 +283,5 @@ while (true) {
 }
 
 refreshLoader.stop()
-AwsCaller.instance.shutdown()
+caller.shutdown()
 Ds.disconnectAll()

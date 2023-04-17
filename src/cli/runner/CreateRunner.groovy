@@ -36,8 +36,11 @@ create
         log.info 'vpc info: {}', vpcInfo
         manager.initSecurityGroupRules(vpcInfo, proxyPort, 22, 80, 81, 5010)
 
-        def igwId = manager.addInternetGateway(vpcInfo)
-        manager.addIgwRoute(region, vpcInfo.id, vpcInfo.routeTableId, igwId)
+        def isAws = 'aws' == Conf.instance.get('cloud')
+        if (isAws) {
+            def igwId = manager.addInternetGateway(vpcInfo)
+            manager.addIgwRoute(region, vpcInfo.id, vpcInfo.routeTableId, igwId)
+        }
 
         return
     }

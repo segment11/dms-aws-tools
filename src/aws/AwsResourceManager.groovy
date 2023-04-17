@@ -22,7 +22,7 @@ class AwsResourceManager {
 
     int cidrBlockThirdByZone(String region, String zoneName) {
         // will change, use static better
-        def allAzList = awsCaller.getAvailabilityZoneList(region, true).collect { it.zoneName }
+        def allAzList = awsCaller.getAvailabilityZoneList(region).collect { it.zoneName }
         // one zone one subnet, 1 + zone index -> 172.48.1.0/24, 172.48.2.0/24, etc
         // 172.48.0.0/** left for engula mange
         1 + allAzList.indexOf(zoneName)

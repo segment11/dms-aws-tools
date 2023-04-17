@@ -1,6 +1,8 @@
 package cli.runner
 
 import aws.AwsCaller
+import com.segment.common.Conf
+import model.MontAwsResourceDTO
 import org.slf4j.LoggerFactory
 import support.CacheSession
 
@@ -45,16 +47,22 @@ delete
         }
 
         // delete igw
-        def igw = caller.getInternetGatewayByVpcId(region, vpcId)
-        if (igw) {
-            caller.detachInternetGateway(region, vpcId, igw.internetGatewayId)
-            log.warn 'igw detached'
-            caller.deleteInternetGateway(region, igw.internetGatewayId)
-            log.warn 'igw deleted'
+        def isAws = 'aws' == Conf.instance.get('cloud')
+        if (isAws) {
+            def igw = caller.getInternetGatewayByVpcId(region, vpcId)
+            if (igw) {
+                caller.detachInternetGateway(region, vpcId, igw.internetGatewayId)
+                log.warn 'igw detached'
+                caller.deleteInternetGateway(region, igw.internetGatewayId)
+                log.warn 'igw deleted'
+                new MontAwsResourceDTO(arn: igw.internetGatewayId).delete()
+            }
         }
 
         caller.deleteVpc(region, vpcId)
         log.warn 'vpc deleted'
+        new MontAwsResourceDTO(arn: vpcId).delete()
+
         return
     }
 
@@ -89,6 +97,7 @@ delete
 
         caller.deleteSubnet(region, subnetId)
         log.warn 'subnet deleted'
+        new MontAwsResourceDTO(arn: subnetId).delete()
         return
     }
 
@@ -136,6 +145,7 @@ delete
             }
 
             log.info 'instance is terminated. ip: {}', ip
+            new MontAwsResourceDTO(arn: instanceId).delete()
             return
         }
 

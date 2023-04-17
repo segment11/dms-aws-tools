@@ -41,6 +41,8 @@ compileGroovy {
     groovyOptions.configurationScript = file("config.groovy")
 }
 
+def awsSdkVersion = '1.12.338'
+
 configurations {
     runtime.exclude group: "org.slf4j", module: "slf4j-log4j12"
     compile.exclude group: "org.slf4j", module: "slf4j-log4j12"
@@ -69,9 +71,12 @@ dependencies {
 
     implementation group: 'io.prometheus', name: 'simpleclient', version: '0.15.0'
 
-    implementation group: 'com.amazonaws', name: 'aws-java-sdk-ec2', version: '1.12.338'
-    implementation group: 'com.amazonaws', name: 'aws-java-sdk-s3', version: '1.12.338'
-    implementation group: 'com.amazonaws', name: 'aws-java-sdk-elasticloadbalancingv2', version: '1.12.338'
+    implementation group: 'com.amazonaws', name: 'aws-java-sdk-ec2', version: awsSdkVersion
+    implementation group: 'com.amazonaws', name: 'aws-java-sdk-s3', version: awsSdkVersion
+    implementation group: 'com.amazonaws', name: 'aws-java-sdk-elasticloadbalancingv2', version: awsSdkVersion
+
+    implementation group: 'com.aliyun', name: 'vpc20160428', version: '3.2.23'
+    implementation group: 'com.aliyun', name: 'ecs20140526', version: '4.24.56'
 
     implementation group: 'io.github.segment11', name: 'segmentweb', version: '1.1-SNAPSHOT'
     implementation group: 'io.github.segment11', name: 'segmentd', version: '1.1-SNAPSHOT'

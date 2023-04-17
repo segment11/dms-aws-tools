@@ -19,9 +19,14 @@ list
 } { cmd ->
     def type = cmd.getOptionValue('type')
     if ('region' == type) {
-        AwsCaller.regions.each {
-            log.info it.name + ', ' + it.des
+        List<List<String>> table = []
+        List<String> header = ['region name', 'description']
+        table << header
+        AwsCaller.instance.regions.each {
+            List<String> row = [it.name, it.des]
+            table << row
         }
+        TablePrinter.print(table)
         return
     }
 
@@ -29,7 +34,7 @@ list
 
     if ('az' == type) {
         def region = cmd.getOptionValue('region')
-        def list = caller.getAvailabilityZoneList(region, true)
+        def list = caller.getAvailabilityZoneList(region)
         List<List<String>> table = []
         List<String> header = ['region name', 'zone name', 'state']
         table << header
@@ -138,9 +143,14 @@ list
             return
         }
 
-        for (one in filterList) {
-            log.info one.toString()
+        List<List<String>> table = []
+        List<String> header = ['instance type', 'mem MB', 'cpu vCore']
+        table << header
+        list.each {
+            List<String> row = [it.instanceType.toString(), it.memMB.toString(), it.cpuVCore.toString()]
+            table << row
         }
+        TablePrinter.print(table)
         return
     }
 
@@ -154,9 +164,14 @@ list
             return
         }
 
-        for (one in filterList) {
-            log.info one.toString()
+        List<List<String>> table = []
+        List<String> header = ['image id', 'name', 'architecture']
+        table << header
+        list.each {
+            List<String> row = [it.id, it.name, it.architecture]
+            table << row
         }
+        TablePrinter.print(table)
         return
     }
 
