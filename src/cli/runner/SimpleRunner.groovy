@@ -1,7 +1,9 @@
 package cli.runner
 
+import aws.AliyunCaller
 import aws.AwsCaller
 import cli.TablePrinter
+import com.segment.common.Conf
 import model.MontAwsResourceDTO
 import org.segment.d.Record
 import org.slf4j.LoggerFactory
@@ -133,12 +135,36 @@ list
         return
     }
 
+    if ('instanceTypeFamily' == type) {
+        if ('aliyun' != Conf.instance.get('cloud')) {
+            log.warn 'only aliyun support instance type family'
+            return
+        }
+
+        def region = cmd.getOptionValue('region')
+
+        def list = AliyunCaller.instance.getInstanceTypeFamilyList(region)
+        List<List<String>> table = []
+        List<String> header = ['instance type family', 'generation']
+        table << header
+        list.each {
+            List<String> row = [it.instanceTypeFamilyId, it.generation]
+            table << row
+        }
+        TablePrinter.print(table)
+        return
+    }
+
     if ('instanceType' == type) {
         def region = cmd.getOptionValue('region')
-        def list = caller.getInstanceTypeListInRegion(region)
         def keyword = cmd.getOptionValue('keyword')
-        def filterList = keyword ? list.findAll { it.instanceType.contains(keyword) } : list
-        if (!filterList) {
+        if (!keyword) {
+            log.warn 'no keyword given'
+            return
+        }
+
+        def list = caller.getInstanceTypeListInRegion(region, keyword)
+        if (!list) {
             log.warn 'no instance type found'
             return
         }
@@ -156,11 +182,15 @@ list
 
     if ('image' == type) {
         def region = cmd.getOptionValue('region')
-        def list = caller.getImageListInRegion(region)
         def keyword = cmd.getOptionValue('keyword')
-        def filterList = keyword ? list.findAll { it.name.contains(keyword) } : list
-        if (!filterList) {
-            log.warn 'no image found'
+        if (!keyword) {
+            log.warn 'no keyword given'
+            return
+        }
+
+        def list = caller.getImageListInRegion(region, keyword)
+        if (!list) {
+            log.warn 'no image- found'
             return
         }
 

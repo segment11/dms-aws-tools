@@ -92,16 +92,19 @@ class AwsCaller {
     }
 
     @Memoized
-    List<InstanceTypeInfo2> getInstanceTypeListInRegion(String regionName) {
+    List<InstanceTypeInfo2> getInstanceTypeListInRegion(String regionName, String instanceTypePattern) {
         if (isAliyun) {
-            def r = AliyunCaller.instance.getInstanceTypeListInRegion()
+            def r = AliyunCaller.instance.getInstanceTypeList(instanceTypePattern)
             return r.collect {
-                return new InstanceTypeInfo2(it.instanceTypeId, (it.memorySize * 1024).longValue(), it.cpuCoreCount)
+                def memorySize = it.memorySize
+                def memMB = memorySize * 1024
+                return new InstanceTypeInfo2(it.instanceTypeId, memMB.longValue(), it.cpuCoreCount)
             }
         }
 
         def client = getEc2Client(regionName)
         def request = new DescribeInstanceTypesRequest()
+                .withFilters(new Filter('instance-type', [instanceTypePattern + '*']))
         def result = client.describeInstanceTypes(request)
         def r = result.instanceTypes
 
@@ -111,16 +114,16 @@ class AwsCaller {
     }
 
     @Memoized
-    List<ImageInfo> getImageListInRegion(String regionName) {
+    List<ImageInfo> getImageListInRegion(String regionName, String name) {
         if (isAliyun) {
-            def r = AliyunCaller.instance.getImageListInRegion(regionName)
+            def r = AliyunCaller.instance.getImageListInRegion(regionName, name)
             return r.collect {
                 return new ImageInfo(it.imageId, it.imageName, it.architecture)
             }
         }
 
         def client = getEc2Client(regionName)
-        def request = new DescribeImagesRequest()
+        def request = new DescribeImagesRequest().withFilters(new Filter('name', [name]))
         def result = client.describeImages(request)
         def r = result.images
         r.collect {
@@ -163,7 +166,6 @@ class AwsCaller {
                         .withVpcId(it.vpcId)
                         .withCidrBlock(it.cidrBlock)
                         .withState(it.status)
-                        .withTags(it.tags?.tag.collect { new Tag(it.key, it.value) })
             }
         }
 
@@ -198,7 +200,6 @@ class AwsCaller {
                     .withVpcId(r.vpcId)
                     .withCidrBlock(r.cidrBlock)
                     .withState(r.status)
-                    .withTags(r.tags?.tag.collect { new Tag(it.key, it.value) })
         }
 
         def client = getEc2Client(regionName)
@@ -224,6 +225,14 @@ class AwsCaller {
     }
 
     String getDefaultGroupId(String regionName, String vpcId) {
+        if (isAliyun) {
+            def list = AliyunCaller.instance.listSecurityGroup(regionName, vpcId)
+            if (!list) {
+                throw new IllegalStateException("vpc $vpcId has no router table")
+            }
+            return list[0].securityGroupId
+        }
+
         def client = getEc2Client(regionName)
         def request = new DescribeSecurityGroupsRequest().
                 withFilters(new Filter('vpc-id').withValues(vpcId))
@@ -271,12 +280,11 @@ class AwsCaller {
 
     String getDefaultRouteTableId(String regionName, String vpcId) {
         if (isAliyun) {
-            def vpc = AliyunCaller.instance.getVpcById(regionName, vpcId)
-            def r = vpc.routerTableIds?.routerTableIds
-            if (!r) {
+            def list = AliyunCaller.instance.listRouteTable(regionName, vpcId)
+            if (!list) {
                 throw new IllegalStateException("vpc $vpcId has no router table")
             }
-            return r[0]
+            return list[0].routeTableId
         }
 
         def client = getEc2Client(regionName)
@@ -576,6 +584,18 @@ class AwsCaller {
     }
 
     List<Instance> listInstance(String regionName, String vpcId) {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.listInstance(regionName, vpcId)
+            return r.collect {
+                new Instance()
+                        .withInstanceId(it.instanceId)
+                        .withInstanceType(it.instanceType)
+                        .withPrivateIpAddress(it.innerIpAddress.ipAddress[0])
+                        .withPublicIpAddress(it.publicIpAddress.ipAddress[0])
+                        .withState(new InstanceState().withName(it.status))
+            }
+        }
+
         def client = getEc2Client(regionName)
         def request = new DescribeInstancesRequest().
                 withFilters(new Filter('vpc-id').withValues(vpcId))

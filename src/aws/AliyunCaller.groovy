@@ -1,11 +1,9 @@
 package aws
 
-import com.aliyun.ecs20140526.models.DescribeImagesRequest
-import com.aliyun.ecs20140526.models.DescribeImagesResponseBody
-import com.aliyun.ecs20140526.models.DescribeInstanceTypesRequest
-import com.aliyun.ecs20140526.models.DescribeInstanceTypesResponseBody
+import com.aliyun.ecs20140526.models.*
 import com.aliyun.teaopenapi.models.Config
-import com.aliyun.vpc20160428.models.*
+import com.aliyun.vpc20160428.models.DescribeRouteTableListRequest
+import com.aliyun.vpc20160428.models.DescribeRouteTableListResponseBody
 import groovy.transform.CompileStatic
 import groovy.transform.Memoized
 import groovy.util.logging.Slf4j
@@ -23,7 +21,7 @@ class AliyunCaller {
             def vpcClientConfig = new Config()
                     .setAccessKeyId(accessKey)
                     .setAccessKeySecret(secretKey)
-                    .setEndpoint('https://vpc.aliyuncs.com')
+                    .setEndpoint('vpc.aliyuncs.com')
             vpcClient = new com.aliyun.vpc20160428.Client(vpcClientConfig)
         }
 
@@ -31,45 +29,52 @@ class AliyunCaller {
             def ecsClientConfig = new Config()
                     .setAccessKeyId(accessKey)
                     .setAccessKeySecret(secretKey)
-                    .setEndpoint('https://ecs.aliyuncs.com')
+                    .setEndpoint('ecs.aliyuncs.com')
             ecsClient = new com.aliyun.ecs20140526.Client(ecsClientConfig)
         }
     }
 
     @Memoized
-    List<DescribeRegionsResponseBody.DescribeRegionsResponseBodyRegionsRegion> getRegions() {
-        def request = new DescribeRegionsRequest()
+    List<com.aliyun.vpc20160428.models.DescribeRegionsResponseBody.DescribeRegionsResponseBodyRegionsRegion> getRegions() {
+        def request = new com.aliyun.vpc20160428.models.DescribeRegionsRequest()
         def result = vpcClient.describeRegions(request)
         def body = result.body
         return body.regions.region
     }
 
     @Memoized
-    List<DescribeZonesResponseBody.DescribeZonesResponseBodyZonesZone> getAvailabilityZoneList(String regionId) {
-        def request = new DescribeZonesRequest()
+    List<com.aliyun.vpc20160428.models.DescribeZonesResponseBody.DescribeZonesResponseBodyZonesZone> getAvailabilityZoneList(String regionId) {
+        def request = new com.aliyun.vpc20160428.models.DescribeZonesRequest()
                 .setRegionId(regionId)
         def result = vpcClient.describeZones(request)
         def body = result.body
         return body.zones.zone
     }
 
-    List<DescribeInstanceTypesResponseBody.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType> getInstanceTypeListInRegion() {
-        def request = new DescribeInstanceTypesRequest()
+    List<DescribeInstanceTypesResponseBody.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType> getInstanceTypeList(String instanceTypePattern) {
+        def request = new DescribeInstanceTypesRequest().setInstanceTypeFamily(instanceTypePattern)
         def result = ecsClient.describeInstanceTypes(request)
         def body = result.body
         return body.instanceTypes.instanceType
     }
 
-    List<DescribeImagesResponseBody.DescribeImagesResponseBodyImagesImage> getImageListInRegion(String regionId) {
-        def request = new DescribeImagesRequest().setRegionId(regionId)
+    List<DescribeInstanceTypeFamiliesResponseBody.DescribeInstanceTypeFamiliesResponseBodyInstanceTypeFamiliesInstanceTypeFamily> getInstanceTypeFamilyList(String regionId) {
+        def request = new DescribeInstanceTypeFamiliesRequest().setRegionId(regionId)
+        def result = ecsClient.describeInstanceTypeFamilies(request)
+        def body = result.body
+        return body.instanceTypeFamilies.instanceTypeFamily
+    }
+
+    List<DescribeImagesResponseBody.DescribeImagesResponseBodyImagesImage> getImageListInRegion(String regionId, String name) {
+        def request = new DescribeImagesRequest().setRegionId(regionId).setImageName(name)
         def result = ecsClient.describeImages(request)
         def body = result.body
         return body.images.image
     }
 
     // max 50
-    List<DescribeVpcsResponseBody.DescribeVpcsResponseBodyVpcsVpc> listVpc(String regionId) {
-        def request = new DescribeVpcsRequest()
+    List<com.aliyun.vpc20160428.models.DescribeVpcsResponseBody.DescribeVpcsResponseBodyVpcsVpc> listVpc(String regionId) {
+        def request = new com.aliyun.vpc20160428.models.DescribeVpcsRequest()
                 .setRegionId(regionId)
                 .setPageSize(50)
                 .setPageNumber(1)
@@ -81,7 +86,7 @@ class AliyunCaller {
         return body.vpcs.vpc
     }
 
-    DescribeVpcsResponseBody.DescribeVpcsResponseBodyVpcsVpc getVpcById(String regionId, String vpcId) {
+    com.aliyun.vpc20160428.models.DescribeVpcsResponseBody.DescribeVpcsResponseBodyVpcsVpc getVpcById(String regionId, String vpcId) {
         def request = new com.aliyun.vpc20160428.models.DescribeVpcsRequest()
                 .setRegionId(regionId)
                 .setVpcId(vpcId)
@@ -93,7 +98,7 @@ class AliyunCaller {
         body.vpcs.vpc[0]
     }
 
-    CreateVpcResponseBody createVpc(String regionId, String cidrBlock) {
+    com.aliyun.vpc20160428.models.CreateVpcResponseBody createVpc(String regionId, String cidrBlock) {
         def request = new com.aliyun.vpc20160428.models.CreateVpcRequest()
                 .setRegionId(regionId)
                 .setCidrBlock(cidrBlock)
@@ -108,7 +113,27 @@ class AliyunCaller {
         vpcClient.deleteVpc(request)
     }
 
-    List<DescribeVSwitchesResponseBody.DescribeVSwitchesResponseBodyVSwitchesVSwitch> listVSwitch(String regionId, String vpcId) {
+    List<DescribeSecurityGroupsResponseBody.DescribeSecurityGroupsResponseBodySecurityGroupsSecurityGroup> listSecurityGroup(String regionId, String vpcId) {
+        def request = new DescribeSecurityGroupsRequest()
+                .setRegionId(regionId)
+                .setPageSize(50)
+                .setPageNumber(1)
+                .setVpcId(vpcId)
+        def result = ecsClient.describeSecurityGroups(request)
+        result.body.securityGroups.securityGroup
+    }
+
+    List<DescribeRouteTableListResponseBody.DescribeRouteTableListResponseBodyRouterTableListRouterTableListType> listRouteTable(String regionId, String vpcId) {
+        def request = new DescribeRouteTableListRequest()
+                .setRegionId(regionId)
+                .setPageSize(50)
+                .setPageNumber(1)
+                .setVpcId(vpcId)
+        def result = vpcClient.describeRouteTableList(request)
+        result.body.routerTableList.routerTableListType
+    }
+
+    List<com.aliyun.vpc20160428.models.DescribeVSwitchesResponseBody.DescribeVSwitchesResponseBodyVSwitchesVSwitch> listVSwitch(String regionId, String vpcId) {
         def request = new com.aliyun.vpc20160428.models.DescribeVSwitchesRequest()
                 .setRegionId(regionId)
                 .setVpcId(vpcId)
@@ -122,7 +147,7 @@ class AliyunCaller {
         body.vSwitches.vSwitch
     }
 
-    DescribeVSwitchesResponseBody.DescribeVSwitchesResponseBodyVSwitchesVSwitch getVSwitchById(String regionId, String vSwitchId) {
+    com.aliyun.vpc20160428.models.DescribeVSwitchesResponseBody.DescribeVSwitchesResponseBodyVSwitchesVSwitch getVSwitchById(String regionId, String vSwitchId) {
         def request = new com.aliyun.vpc20160428.models.DescribeVSwitchesRequest()
                 .setRegionId(regionId)
                 .setVSwitchId(vSwitchId)
@@ -134,7 +159,7 @@ class AliyunCaller {
         body.vSwitches.vSwitch[0]
     }
 
-    DescribeVSwitchesResponseBody.DescribeVSwitchesResponseBodyVSwitchesVSwitch getVSwitch(String regionId, String vpcId, String cidrBlock) {
+    com.aliyun.vpc20160428.models.DescribeVSwitchesResponseBody.DescribeVSwitchesResponseBodyVSwitchesVSwitch getVSwitch(String regionId, String vpcId, String cidrBlock) {
         def request = new com.aliyun.vpc20160428.models.DescribeVSwitchesRequest()
                 .setRegionId(regionId)
                 .setVpcId(vpcId)
@@ -147,7 +172,7 @@ class AliyunCaller {
         body.vSwitches.vSwitch[0]
     }
 
-    CreateVSwitchResponseBody createVSwitch(String regionId, String vpcId, String cidrBlock, String zoneId) {
+    com.aliyun.vpc20160428.models.CreateVSwitchResponseBody createVSwitch(String regionId, String vpcId, String cidrBlock, String zoneId) {
         def request = new com.aliyun.vpc20160428.models.CreateVSwitchRequest()
                 .setRegionId(regionId)
                 .setVpcId(vpcId)
@@ -163,6 +188,16 @@ class AliyunCaller {
                 .setRegionId(regionId)
                 .setVSwitchId(vSwitchId)
         vpcClient.deleteVSwitch(request)
+    }
+
+    List<DescribeInstancesResponseBody.DescribeInstancesResponseBodyInstancesInstance> listInstance(String regionId, String vpcId) {
+        def request = new DescribeInstancesRequest()
+                .setRegionId(regionId)
+                .setPageSize(50)
+                .setPageNumber(1)
+                .setVpcId(vpcId)
+        def result = ecsClient.describeInstances(request)
+        result.body.instances.instance
     }
 
     void shutdown() {
