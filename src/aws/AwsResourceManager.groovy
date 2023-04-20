@@ -154,11 +154,16 @@ class AwsResourceManager {
     }
 
     synchronized boolean addIgwRoute(String region, String vpcId, String routeTableId, String igwId) {
-        addRoute(region, vpcId, routeTableId, allCidrIp, igwId)
+        if (awsCaller.isAliyun) {
+            AliyunCaller.instance.associateRouteTableWithGateway(region, routeTableId, igwId)
+            true
+        } else {
+            addRoute(region, vpcId, routeTableId, allCidrIp, igwId, 'internet-gateway')
+        }
     }
 
-    synchronized boolean addRoute(String region, String vpcId, String routeTableId, String cidrBlock, String gatewayId) {
-        String subKey = cidrBlock + ':' + gatewayId
+    synchronized boolean addRoute(String region, String vpcId, String routeTableId, String cidrBlock, String nextHopId, String nextHopType) {
+        String subKey = cidrBlock + ':' + nextHopId
 
         def one = new MontAwsResourceDTO(
                 vpcId: vpcId,
@@ -172,7 +177,7 @@ class AwsResourceManager {
         Event.builder().type(Event.Type.vpc).reason('add route').
                 result('vpcId: ' + vpcId).build().log('subKey: ' + subKey).add()
 
-        awsCaller.createRouteByGateway(region, routeTableId, cidrBlock, gatewayId)
+        awsCaller.createRoute(region, routeTableId, cidrBlock, nextHopId, nextHopType)
         new MontAwsResourceDTO(
                 vpcId: vpcId,
                 region: region,
@@ -201,8 +206,13 @@ class AwsResourceManager {
         Event.builder().type(Event.Type.vpc).reason('add internet gateway').
                 result('vpcId: ' + vpcId).build().log('subKey: ' + subKey).add()
 
-        def igw = awsCaller.createInternetGateway(region)
-        def igwId = igw.internetGatewayId
+        String igwId
+        if (awsCaller.isAliyun) {
+            igwId = AliyunCaller.instance.createIpv4Gateway(region, vpcId)
+        } else {
+            igwId = awsCaller.createInternetGateway(region)
+        }
+
         new MontAwsResourceDTO(
                 vpcId: vpcId,
                 region: region,
@@ -211,9 +221,14 @@ class AwsResourceManager {
                 referArn: vpcId,
                 subKey: subKey).add()
 
-        log.warn 'attach igw: {} to vpc: {}', igwId, vpcId
-        awsCaller.attachInternetGateway(region, vpcId, igwId)
-        igwId
+        if (awsCaller.isAliyun) {
+            return igwId
+        } else {
+            // aws need attach
+            log.warn 'attach igw: {} to vpc: {}', igwId, vpcId
+            awsCaller.attachInternetGateway(region, vpcId, igwId)
+            return igwId
+        }
     }
 
     // cidrBlockSuffix -> 1.0/24

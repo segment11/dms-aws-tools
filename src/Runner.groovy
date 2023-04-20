@@ -37,6 +37,7 @@ if (!accessKey || !secretKey) {
 
 def caller = AwsCaller.instance
 caller.init(accessKey, secretKey)
+caller.isAws = cloud == 'aws'
 caller.isAliyun = cloud == 'aliyun'
 if (caller.isAliyun) {
     AliyunCaller.instance.init(accessKey, secretKey)

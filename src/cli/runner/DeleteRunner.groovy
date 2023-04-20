@@ -47,8 +47,7 @@ delete
         }
 
         // delete igw
-        def isAws = 'aws' == Conf.instance.get('cloud')
-        if (isAws) {
+        if (caller.isAws) {
             def igw = caller.getInternetGatewayByVpcId(region, vpcId)
             if (igw) {
                 caller.detachInternetGateway(region, vpcId, igw.internetGatewayId)
@@ -57,6 +56,8 @@ delete
                 log.warn 'igw deleted'
                 new MontAwsResourceDTO(arn: igw.internetGatewayId).delete()
             }
+        } else if (caller.isAliyun) {
+
         }
 
         caller.deleteVpc(region, vpcId)

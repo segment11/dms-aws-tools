@@ -3,7 +3,6 @@ package cli.runner
 import aws.AliyunCaller
 import aws.AwsCaller
 import cli.TablePrinter
-import com.segment.common.Conf
 import model.MontAwsResourceDTO
 import org.segment.d.Record
 import org.slf4j.LoggerFactory
@@ -136,7 +135,7 @@ list
     }
 
     if ('instanceTypeFamily' == type) {
-        if ('aliyun' != Conf.instance.get('cloud')) {
+        if (!caller.isAliyun) {
             log.warn 'only aliyun support instance type family'
             return
         }

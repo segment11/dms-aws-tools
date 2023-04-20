@@ -2,8 +2,7 @@ package aws
 
 import com.aliyun.ecs20140526.models.*
 import com.aliyun.teaopenapi.models.Config
-import com.aliyun.vpc20160428.models.DescribeRouteTableListRequest
-import com.aliyun.vpc20160428.models.DescribeRouteTableListResponseBody
+import com.aliyun.vpc20160428.models.*
 import groovy.transform.CompileStatic
 import groovy.transform.Memoized
 import groovy.util.logging.Slf4j
@@ -123,6 +122,32 @@ class AliyunCaller {
         result.body.securityGroups.securityGroup
     }
 
+    boolean createSgrIngress(String regionId, String groupId, String ipProtocol, String sourceCidrIp, int fromPort, int toPort, boolean isDrop = false) {
+        def request = new AuthorizeSecurityGroupRequest()
+                .setRegionId(regionId)
+                .setSecurityGroupId(groupId)
+                .setIpProtocol(ipProtocol)
+                .setSourceCidrIp(sourceCidrIp)
+                .setPortRange(fromPort + '/' + toPort)
+                .setPolicy(isDrop ? 'drop' : 'accept')
+        def result = ecsClient.authorizeSecurityGroup(request)
+        result.statusCode == 200
+    }
+
+    boolean createSgrEgress(String regionId, String groupId, String ipProtocol, String destCidrIp, Integer fromPort, Integer toPort, boolean isDrop = false) {
+        def request = new AuthorizeSecurityGroupEgressRequest()
+                .setRegionId(regionId)
+                .setSecurityGroupId(groupId)
+                .setIpProtocol(ipProtocol)
+                .setDestCidrIp(destCidrIp)
+                .setPolicy(isDrop ? 'drop' : 'accept')
+        if (fromPort != null && toPort != null) {
+            request.setPortRange(fromPort + '/' + toPort)
+        }
+        def result = ecsClient.authorizeSecurityGroupEgress(request)
+        result.statusCode == 200
+    }
+
     List<DescribeRouteTableListResponseBody.DescribeRouteTableListResponseBodyRouterTableListRouterTableListType> listRouteTable(String regionId, String vpcId) {
         def request = new DescribeRouteTableListRequest()
                 .setRegionId(regionId)
@@ -131,6 +156,47 @@ class AliyunCaller {
                 .setVpcId(vpcId)
         def result = vpcClient.describeRouteTableList(request)
         result.body.routerTableList.routerTableListType
+    }
+
+    Boolean createRoute(String regionId, String routeTableId, String cidrBlock, String nextHopId, String nextHopType) {
+        def request = new com.aliyun.vpc20160428.models.CreateRouteEntryRequest()
+                .setRegionId(regionId)
+                .setRouteTableId(routeTableId)
+                .setDestinationCidrBlock(cidrBlock)
+                .setNextHopType(nextHopType)
+                .setNextHopId(nextHopId)
+        def result = vpcClient.createRouteEntry(request)
+        result.statusCode == 200
+    }
+
+    Boolean deleteRoute(String regionId, String routeTableId, String cidrBlock) {
+        def request = new com.aliyun.vpc20160428.models.DeleteRouteEntryRequest()
+                .setRegionId(regionId)
+                .setRouteTableId(routeTableId)
+                .setDestinationCidrBlock(cidrBlock)
+        def result = vpcClient.deleteRouteEntry(request)
+        result.statusCode == 200
+    }
+
+    String createIpv4Gateway(String regionId, String vpcId) {
+        def request = new CreateIpv4GatewayRequest()
+                .setRegionId(regionId).setVpcId(vpcId)
+        def result = vpcClient.createIpv4Gateway(request)
+        result.body.ipv4GatewayId
+    }
+
+    void deleteIpv4Gateway(String regionId, String ipv4GatewayId) {
+        def request = new DeleteIpv4GatewayRequest()
+                .setRegionId(regionId).setIpv4GatewayId(ipv4GatewayId)
+        vpcClient.deleteIpv4Gateway(request)
+    }
+
+    void associateRouteTableWithGateway(String regionId, String routeTableId, String ipv4GatewayId) {
+        def request = new AssociateRouteTableWithGatewayRequest().
+                setRegionId(regionId).
+                setRouteTableId(routeTableId).
+                setGatewayId(ipv4GatewayId)
+        vpcClient.associateRouteTableWithGateway(request)
     }
 
     List<com.aliyun.vpc20160428.models.DescribeVSwitchesResponseBody.DescribeVSwitchesResponseBodyVSwitchesVSwitch> listVSwitch(String regionId, String vpcId) {
@@ -188,6 +254,33 @@ class AliyunCaller {
                 .setRegionId(regionId)
                 .setVSwitchId(vSwitchId)
         vpcClient.deleteVSwitch(request)
+    }
+
+    void deleteKeyPair(String regionId, String keyPairName) {
+        def request = new com.aliyun.ecs20140526.models.DeleteKeyPairsRequest()
+                .setRegionId(regionId)
+                .setKeyPairNames(keyPairName)
+        ecsClient.deleteKeyPairs(request)
+    }
+
+    CreateKeyPairResponseBody createKeyPair(String regionId, String keyPairName) {
+        def request = new com.aliyun.ecs20140526.models.CreateKeyPairRequest()
+                .setRegionId(regionId)
+                .setKeyPairName(keyPairName)
+        def result = ecsClient.createKeyPair(request)
+        result.body
+    }
+
+    DescribeKeyPairsResponseBody.DescribeKeyPairsResponseBodyKeyPairsKeyPair getKeyPair(String regionId, String keyPairName) {
+        def request = new com.aliyun.ecs20140526.models.DescribeKeyPairsRequest()
+                .setRegionId(regionId)
+                .setKeyPairName(keyPairName)
+        def result = ecsClient.describeKeyPairs(request)
+        def body = result.body
+        if (body.totalCount == 0) {
+            return null
+        }
+        body.keyPairs.keyPair[0]
     }
 
     List<DescribeInstancesResponseBody.DescribeInstancesResponseBodyInstancesInstance> listInstance(String regionId, String vpcId) {

@@ -25,6 +25,8 @@ class AwsCaller {
     }
 
     boolean isAliyun = false
+    // default use aws sdk api
+    boolean isAws = true
 
     private Map<String, AmazonEC2> clientCached = new HashMap<>()
 
@@ -241,6 +243,22 @@ class AwsCaller {
     }
 
     Boolean createSgrIngress(String regionName, String groupId, List<IpPermission> ipPermissions) {
+        if (isAliyun) {
+            def aliyunCaller = AliyunCaller.instance
+            for (one in ipPermissions) {
+                for (ipv4Range in one.ipv4Ranges) {
+                    def isOk = aliyunCaller.createSgrIngress(regionName, groupId,
+                            one.ipProtocol, ipv4Range.cidrIp, one.fromPort, one.toPort)
+                    if (!isOk) {
+                        // ignore
+                        log.warn 'create security group ingress rule failed, protocol: {}, cidr: {}, from port: {}, to port: {}',
+                                one.ipProtocol, ipv4Range.cidrIp, one.fromPort, one.toPort
+                    }
+                }
+            }
+            return true
+        }
+
         def client = getEc2Client(regionName)
         def request = new AuthorizeSecurityGroupIngressRequest().
                 withGroupId(groupId).
@@ -260,6 +278,22 @@ class AwsCaller {
     }
 
     Boolean createSgrEgress(String regionName, String groupId, List<IpPermission> ipPermissions) {
+        if (isAliyun) {
+            def aliyunCaller = AliyunCaller.instance
+            for (one in ipPermissions) {
+                for (ipv4Range in one.ipv4Ranges) {
+                    def isOk = aliyunCaller.createSgrEgress(regionName, groupId,
+                            one.ipProtocol, ipv4Range.cidrIp, one.fromPort, one.toPort)
+                    if (!isOk) {
+                        // ignore
+                        log.warn 'create security group egress rule failed, protocol: {}, cidr: {}, from port: {}, to port: {}',
+                                one.ipProtocol, ipv4Range.cidrIp, one.fromPort, one.toPort
+                    }
+                }
+            }
+            return true
+        }
+
         def client = getEc2Client(regionName)
         def request = new AuthorizeSecurityGroupEgressRequest().
                 withGroupId(groupId).
@@ -294,18 +328,36 @@ class AwsCaller {
         result.routeTables[0].routeTableId
     }
 
-    Boolean createRouteByGateway(String regionName, String routeTableId, String cidrBlock, String gatewayId) {
+    Boolean createRoute(String regionName, String routeTableId, String cidrBlock, String nextHopId, String nextHopType = 'internet-gateway') {
+        if (isAliyun) {
+            return AliyunCaller.instance.createRoute(regionName, routeTableId, cidrBlock, nextHopId, nextHopType)
+        }
+
         def client = getEc2Client(regionName)
         def request = new CreateRouteRequest().
                 withRouteTableId(routeTableId).
-                withDestinationCidrBlock(cidrBlock).
-                withGatewayId(gatewayId)
+                withDestinationCidrBlock(cidrBlock)
+
+        if (nextHopType == 'internet-gateway') {
+            request.withGatewayId(nextHopId)
+        } else if (nextHopType == 'nat-gateway') {
+            request.withNatGatewayId(nextHopId)
+        } else if (nextHopType == 'vpc-peering-connection') {
+            request.withVpcPeeringConnectionId(nextHopId)
+        } else {
+            throw new IllegalArgumentException("not implemented yet: $nextHopType")
+        }
 
         def result = client.createRoute(request)
         result.return
     }
 
     void deleteRoute(String regionName, String routeTableId, String cidrBlock) {
+        if (isAliyun) {
+            AliyunCaller.instance.deleteRoute(regionName, routeTableId, cidrBlock)
+            return
+        }
+
         def client = getEc2Client(regionName)
         def request = new DeleteRouteRequest().
                 withRouteTableId(routeTableId).
@@ -314,19 +366,22 @@ class AwsCaller {
         client.deleteRoute(request)
     }
 
-    InternetGateway createInternetGateway(String regionName) {
+    String createInternetGateway(String regionName) {
         if (isAliyun) {
-            log.warn 'aliyun does not support internet gateway'
-            return null
+            throw new IllegalStateException('aliyun create and attach is one step, use createIpv4Gateway instead')
         }
 
         def client = getEc2Client(regionName)
         def request = new CreateInternetGatewayRequest()
         def result = client.createInternetGateway(request)
-        result.internetGateway
+        result.internetGateway.internetGatewayId
     }
 
     void attachInternetGateway(String regionName, String vpcId, String gatewayId) {
+        if (isAliyun) {
+            throw new IllegalStateException('aliyun create and attach is one step, use createIpv4Gateway instead')
+        }
+
         def client = getEc2Client(regionName)
         def request = new AttachInternetGatewayRequest().
                 withVpcId(vpcId).
@@ -351,6 +406,11 @@ class AwsCaller {
     }
 
     void deleteInternetGateway(String regionName, String gatewayId) {
+        if (isAliyun) {
+            AliyunCaller.instance.deleteIpv4Gateway(regionName, gatewayId)
+            return
+        }
+
         def client = getEc2Client(regionName)
         def request = new DeleteInternetGatewayRequest().
                 withInternetGatewayId(gatewayId)
@@ -462,6 +522,11 @@ class AwsCaller {
 
     // *** ec2
     void deleteKeyPair(String regionName, String keyName) {
+        if (isAliyun) {
+            AliyunCaller.instance.deleteKeyPair(regionName, keyName)
+            return
+        }
+
         def client = getEc2Client(regionName)
         def request = new DeleteKeyPairRequest().
                 withKeyName(keyName)
@@ -469,6 +534,15 @@ class AwsCaller {
     }
 
     KeyPair createKeyPair(String regionName, String keyName) {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.createKeyPair(regionName, keyName)
+            return new KeyPair()
+                    .withKeyPairId(r.keyPairId)
+                    .withKeyName(r.keyPairName)
+                    .withKeyFingerprint(r.keyPairFingerPrint)
+                    .withKeyMaterial(r.privateKeyBody)
+        }
+
         def client = getEc2Client(regionName)
         def request = new CreateKeyPairRequest().
                 withKeyName(keyName).
@@ -480,6 +554,16 @@ class AwsCaller {
     }
 
     KeyPairInfo getKeyPair(String regionName, String keyName) {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.getKeyPair(regionName, keyName)
+            if (!r) {
+                return null
+            }
+            return new KeyPairInfo()
+                    .withKeyName(r.keyPairName)
+                    .withKeyFingerprint(r.keyPairFingerPrint)
+        }
+
         def client = getEc2Client(regionName)
         def request = new DescribeKeyPairsRequest().
                 withKeyNames(keyName)
