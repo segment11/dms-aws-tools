@@ -94,31 +94,35 @@ class AwsCaller {
     }
 
     @Memoized
-    List<InstanceTypeInfo2> getInstanceTypeListInRegion(String regionName, String instanceTypePattern) {
+    List<InstanceTypeInfo2> getInstanceTypeListInRegion(String regionName, String instanceTypePattern, String architecture) {
         if (isAliyun) {
-            def r = AliyunCaller.instance.getInstanceTypeList(instanceTypePattern)
+            def r = AliyunCaller.instance.getInstanceTypeList(instanceTypePattern, architecture)
             return r.collect {
                 def memorySize = it.memorySize
                 def memMB = memorySize * 1024
-                return new InstanceTypeInfo2(it.instanceTypeId, memMB.longValue(), it.cpuCoreCount)
+                return new InstanceTypeInfo2(it.instanceTypeId, memMB.longValue(), it.cpuCoreCount, it.cpuArchitecture)
             }
         }
 
         def client = getEc2Client(regionName)
         def request = new DescribeInstanceTypesRequest()
-                .withFilters(new Filter('instance-type', [instanceTypePattern + '*']))
+                .withFilters(new Filter('instance-type', [instanceTypePattern + '*']),)
+        if (architecture) {
+            request.withFilters(new Filter('processor-info.supported-architecture', [architecture]))
+        }
         def result = client.describeInstanceTypes(request)
         def r = result.instanceTypes
 
         r.collect {
-            new InstanceTypeInfo2(it.instanceType, it.memoryInfo.sizeInMiB, it.VCpuInfo.defaultVCpus)
+            new InstanceTypeInfo2(it.instanceType, it.memoryInfo.sizeInMiB, it.VCpuInfo.defaultVCpus,
+                    it.processorInfo.supportedArchitectures.join(','))
         }.sort { it.instanceType }
     }
 
     @Memoized
-    List<ImageInfo> getImageListInRegion(String regionName, String name) {
+    List<ImageInfo> getImageListInRegion(String regionName, String name, String architecture) {
         if (isAliyun) {
-            def r = AliyunCaller.instance.getImageListInRegion(regionName, name)
+            def r = AliyunCaller.instance.getImageListInRegion(regionName, name, architecture)
             return r.collect {
                 return new ImageInfo(it.imageId, it.imageName, it.architecture)
             }
@@ -126,6 +130,9 @@ class AwsCaller {
 
         def client = getEc2Client(regionName)
         def request = new DescribeImagesRequest().withFilters(new Filter('name', [name]))
+        if (architecture) {
+            request.withFilters(new Filter('architecture', [architecture]))
+        }
         def result = client.describeImages(request)
         def r = result.images
         r.collect {

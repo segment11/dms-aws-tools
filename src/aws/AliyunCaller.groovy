@@ -50,8 +50,8 @@ class AliyunCaller {
         return body.zones.zone
     }
 
-    List<DescribeInstanceTypesResponseBody.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType> getInstanceTypeList(String instanceTypePattern) {
-        def request = new DescribeInstanceTypesRequest().setInstanceTypeFamily(instanceTypePattern)
+    List<DescribeInstanceTypesResponseBody.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType> getInstanceTypeList(String instanceTypePattern, String architecture) {
+        def request = new DescribeInstanceTypesRequest().setInstanceTypeFamily(instanceTypePattern).setCpuArchitecture(architecture)
         def result = ecsClient.describeInstanceTypes(request)
         def body = result.body
         return body.instanceTypes.instanceType
@@ -64,8 +64,8 @@ class AliyunCaller {
         return body.instanceTypeFamilies.instanceTypeFamily
     }
 
-    List<DescribeImagesResponseBody.DescribeImagesResponseBodyImagesImage> getImageListInRegion(String regionId, String name) {
-        def request = new DescribeImagesRequest().setRegionId(regionId).setImageName(name)
+    List<DescribeImagesResponseBody.DescribeImagesResponseBodyImagesImage> getImageListInRegion(String regionId, String name, String architecture) {
+        def request = new DescribeImagesRequest().setRegionId(regionId).setImageName(name).setArchitecture(architecture)
         def result = ecsClient.describeImages(request)
         def body = result.body
         return body.images.image

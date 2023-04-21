@@ -141,12 +141,21 @@ list
         }
 
         def region = cmd.getOptionValue('region')
+        def keyword = cmd.getOptionValue('keyword')
 
         def list = AliyunCaller.instance.getInstanceTypeFamilyList(region)
+        def filterList = keyword ?
+                list.findAll { it.instanceTypeFamilyId.contains(keyword) } : list
+        if (!filterList) {
+            log.warn 'no instance type family found'
+            return
+        }
+
+
         List<List<String>> table = []
         List<String> header = ['instance type family', 'generation']
         table << header
-        list.each {
+        filterList.each {
             List<String> row = [it.instanceTypeFamilyId, it.generation]
             table << row
         }
@@ -157,22 +166,23 @@ list
     if ('instanceType' == type) {
         def region = cmd.getOptionValue('region')
         def keyword = cmd.getOptionValue('keyword')
+        def architecture = cmd.getOptionValue('architecture')
         if (!keyword) {
             log.warn 'no keyword given'
             return
         }
 
-        def list = caller.getInstanceTypeListInRegion(region, keyword)
+        def list = caller.getInstanceTypeListInRegion(region, keyword, architecture)
         if (!list) {
             log.warn 'no instance type found'
             return
         }
 
         List<List<String>> table = []
-        List<String> header = ['instance type', 'mem MB', 'cpu vCore']
+        List<String> header = ['instance type', 'mem MB', 'cpu vCore', 'architecture']
         table << header
         list.each {
-            List<String> row = [it.instanceType.toString(), it.memMB.toString(), it.cpuVCore.toString()]
+            List<String> row = [it.instanceType.toString(), it.memMB.toString(), it.cpuVCore.toString(), it.architecture]
             table << row
         }
         TablePrinter.print(table)
@@ -182,12 +192,13 @@ list
     if ('image' == type) {
         def region = cmd.getOptionValue('region')
         def keyword = cmd.getOptionValue('keyword')
+        def architecture = cmd.getOptionValue('architecture')
         if (!keyword) {
             log.warn 'no keyword given'
             return
         }
 
-        def list = caller.getImageListInRegion(region, keyword)
+        def list = caller.getImageListInRegion(region, keyword, architecture)
         if (!list) {
             log.warn 'no image- found'
             return

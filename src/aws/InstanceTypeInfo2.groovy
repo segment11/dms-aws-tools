@@ -9,4 +9,5 @@ class InstanceTypeInfo2 {
     String instanceType
     Long memMB
     Integer cpuVCore
+    String architecture
 }

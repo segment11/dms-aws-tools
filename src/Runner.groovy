@@ -124,7 +124,8 @@ options.addOption('a', 'az', true, '--az=ap-northeast-1a')
 options.addOption('v', 'vpcId', true, '--vpcId=vpcId')
 options.addOption('s', 'subnetId', true, '--subnetId=subnetId')
 options.addOption('b', 'cidrBlock', true, '--cidrBlock=10.1.0.0/16')
-options.addOption('k', 'keyword', true, 'for filter, eg. --keyword=c3.')
+options.addOption('k', 'keyword', true, 'for filter when list instance type/image, eg. --keyword=c3.')
+options.addOption('A', 'architecture', true, 'for filter when list instance type/image, eg. --architecture=x86_64')
 options.addOption('e', 'ec2', true, 'launch ec2 instance')
 options.addOption('p', 'publicIpv4', false, 'set true if launch ec2 instance with a public ipv4')
 options.addOption('E', 'ec2Init', false, 'init ec2 instance, use with --instanceId and --type')
@@ -149,6 +150,7 @@ String globalSubnetId
 String globalInstanceId
 String globalImageId = c.get('default.image.id')
 String globalInstanceType = c.get('default.instance.type')
+String globalArchitecture = c.get('default.architecture')
 
 String lastLine
 
@@ -205,6 +207,9 @@ while (true) {
         if (globalInstanceType && !finalLine.contains('-i=') && !finalLine.contains('--instanceType=')) {
             finalLine += (' -i=' + globalInstanceType)
         }
+        if (globalArchitecture && !finalLine.contains('-A=') && !finalLine.contains('--architecture=')) {
+            finalLine += (' -A=' + globalArchitecture)
+        }
 
         lastLine = finalLine
         CommandLine cmd
@@ -254,6 +259,10 @@ while (true) {
             globalInstanceType = cmd.getOptionValue('instanceType')
         }
 
+        if (cmd.hasOption('architecture')) {
+            globalArchitecture = cmd.getOptionValue('architecture')
+        }
+
         if (cmd.hasOption('x_session_current_variables')) {
             println 'region: '.padRight(20, ' ') + globalRegion
             println 'az: '.padRight(20, ' ') + globalAz
@@ -262,6 +271,7 @@ while (true) {
             println 'instance id: '.padRight(20, ' ') + globalInstanceId
             println 'image id: '.padRight(20, ' ') + globalImageId
             println 'instance type: '.padRight(20, ' ') + globalInstanceType
+            println 'architecture: '.padRight(20, ' ') + globalArchitecture
             continue
         }
 
