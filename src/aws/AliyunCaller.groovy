@@ -283,6 +283,65 @@ class AliyunCaller {
         body.keyPairs.keyPair[0]
     }
 
+    String runEc2Instance(CreateInstanceRequest request) {
+        def result = ecsClient.createInstance(request)
+        result.body.instanceId
+    }
+
+    String allocatePublicIpAddress(String instanceId) {
+        def request = new AllocatePublicIpAddressRequest()
+                .setInstanceId(instanceId)
+        ecsClient.allocatePublicIpAddress(request).body.ipAddress
+    }
+
+    DescribeInstancesResponseBody.DescribeInstancesResponseBodyInstancesInstance getEc2InstanceById(String regionId, String instanceId) {
+        def request = new DescribeInstancesRequest()
+                .setRegionId(regionId)
+                .setInstanceIds(instanceId)
+        def result = ecsClient.describeInstances(request)
+        def body = result.body
+        if (body.totalCount == 0) {
+            return null
+        }
+        body.instances.instance[0]
+    }
+
+    DescribeInstancesResponseBody.DescribeInstancesResponseBodyInstancesInstance getEc2Instance(String regionId, String name) {
+        def request = new DescribeInstancesRequest()
+                .setRegionId(regionId)
+                .setInstanceName(name)
+        def result = ecsClient.describeInstances(request)
+        def body = result.body
+        if (body.totalCount == 0) {
+            return null
+        }
+        body.instances.instance[0]
+    }
+
+    void stopEc2Instance(String instanceId) {
+        def request = new StopInstanceRequest()
+                .setInstanceId(instanceId)
+        ecsClient.stopInstance(request)
+    }
+
+    void terminateEc2Instance(String instanceId) {
+        def request = new DeleteInstanceRequest()
+                .setInstanceId(instanceId)
+        ecsClient.deleteInstance(request)
+    }
+
+    DescribeInstanceStatusResponseBody.DescribeInstanceStatusResponseBodyInstanceStatusesInstanceStatus getEc2InstanceStatus(String regionId, String instanceId) {
+        def request = new DescribeInstanceStatusRequest()
+                .setRegionId(regionId)
+                .setInstanceId([instanceId])
+        def result = ecsClient.describeInstanceStatus(request)
+        def body = result.body
+        if (body.totalCount == 0) {
+            return null
+        }
+        body.instanceStatuses.instanceStatus[0]
+    }
+
     List<DescribeInstancesResponseBody.DescribeInstancesResponseBodyInstancesInstance> listInstance(String regionId, String vpcId) {
         def request = new DescribeInstancesRequest()
                 .setRegionId(regionId)
