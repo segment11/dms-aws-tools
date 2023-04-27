@@ -1,6 +1,7 @@
 package aws
 
 import com.aliyun.ecs20140526.models.CreateInstanceRequest
+import com.aliyun.ecs20140526.models.DescribeInstancesResponseBody
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.auth.AWSCredentialsProvider
 import com.amazonaws.auth.BasicAWSCredentials
@@ -583,6 +584,21 @@ class AwsCaller {
         list[0]
     }
 
+    List<KeyPairInfo> listKeyPair(String regionName) {
+        if (isAliyun) {
+            def r = AliyunCaller.instance.listKeyPair(regionName)
+            return r.collect {
+                new KeyPairInfo()
+                        .withKeyName(it.keyPairName)
+                        .withKeyFingerprint(it.keyPairFingerPrint)
+            }
+        }
+
+        def client = getEc2Client(regionName)
+        def result = client.describeKeyPairs()
+        result.keyPairs
+    }
+
     Instance runEc2Instance(String regionName, RunInstancesRequest request) {
         if (isAliyun) {
             def tags = request.tagSpecifications[0].tags
@@ -619,13 +635,8 @@ class AwsCaller {
 
     Instance getEc2InstanceById(String regionName, String instanceId) {
         if (isAliyun) {
-            def it = AliyunCaller.instance.getEc2InstanceById(regionName, instanceId)
-            def state = new InstanceState().withName(it.status).withCode(instanceStatusCodeByNameForAliyun[it.status])
-            return new Instance().withInstanceId(it.instanceId)
-                    .withInstanceType(it.instanceType)
-                    .withPrivateIpAddress(it.innerIpAddress.ipAddress[0])
-                    .withPublicIpAddress(it.publicIpAddress.ipAddress[0])
-                    .withState(state)
+            def r = AliyunCaller.instance.getEc2InstanceById(regionName, instanceId)
+            return fromAliyunInstance(r)
         }
 
         def client = getEc2Client(regionName)
@@ -645,13 +656,8 @@ class AwsCaller {
 
     Instance getEc2Instance(String regionName, String name) {
         if (isAliyun) {
-            def it = AliyunCaller.instance.getEc2Instance(regionName, name)
-            def state = new InstanceState().withName(it.status).withCode(instanceStatusCodeByNameForAliyun[it.status])
-            return new Instance().withInstanceId(it.instanceId)
-                    .withInstanceType(it.instanceType)
-                    .withPrivateIpAddress(it.innerIpAddress.ipAddress[0])
-                    .withPublicIpAddress(it.publicIpAddress.ipAddress[0])
-                    .withState(state)
+            def r = AliyunCaller.instance.getEc2Instance(regionName, name)
+            return fromAliyunInstance(r)
         }
 
         def client = getEc2Client(regionName)
@@ -719,13 +725,27 @@ class AwsCaller {
          */
     }
 
+    InstanceState getStateFromAliyunStatus(String status) {
+        new InstanceState().withName(status).withCode(instanceStatusCodeByNameForAliyun[status])
+    }
+
+    Instance fromAliyunInstance(DescribeInstancesResponseBody.DescribeInstancesResponseBodyInstancesInstance one) {
+        def privateIp = one.networkInterfaces.networkInterface[0].primaryIpAddress
+        new Instance()
+                .withInstanceId(one.instanceId)
+                .withInstanceType(one.instanceType)
+                .withImageId(one.imageId)
+                .withPrivateIpAddress(privateIp)
+                .withPublicIpAddress(one.publicIpAddress.ipAddress[0])
+                .withState(getStateFromAliyunStatus(one.status))
+    }
+
     InstanceStatus getEc2InstanceStatus(String regionName, String instanceId) {
         if (isAliyun) {
             def r = AliyunCaller.instance.getEc2InstanceStatus(regionName, instanceId)
-            def state = new InstanceState().withName(r.status).withCode(instanceStatusCodeByNameForAliyun[r.status])
             return new InstanceStatus().
                     withInstanceId(instanceId).
-                    withInstanceState(state)
+                    withInstanceState(getStateFromAliyunStatus(r.status))
         }
 
         def client = getEc2Client(regionName)
@@ -770,15 +790,7 @@ class AwsCaller {
     List<Instance> listInstance(String regionName, String vpcId) {
         if (isAliyun) {
             def r = AliyunCaller.instance.listInstance(regionName, vpcId)
-            return r.collect {
-                def state = new InstanceState().withName(it.status).withCode(instanceStatusCodeByNameForAliyun[it.status])
-                new Instance()
-                        .withInstanceId(it.instanceId)
-                        .withInstanceType(it.instanceType)
-                        .withPrivateIpAddress(it.innerIpAddress.ipAddress[0])
-                        .withPublicIpAddress(it.publicIpAddress.ipAddress[0])
-                        .withState(state)
-            }
+            return r.collect { fromAliyunInstance(it) }
         }
 
         def client = getEc2Client(regionName)

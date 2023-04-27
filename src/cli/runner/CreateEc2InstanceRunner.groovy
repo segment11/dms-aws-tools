@@ -22,8 +22,9 @@ ec2
     def region = cmd.getOptionValue('region')
     def vpcIdShort = cmd.getOptionValue('vpcId')
     def subnetIdShort = cmd.getOptionValue('subnetId')
-    if (!vpcIdShort || !subnetIdShort) {
-        log.warn 'vpcId and subnetId required'
+    def keyPairName = cmd.getOptionValue('keyPairName')
+    if (!vpcIdShort || !subnetIdShort || !keyPairName) {
+        log.warn 'vpcId, subnetId and keyPairName required'
         return
     }
 

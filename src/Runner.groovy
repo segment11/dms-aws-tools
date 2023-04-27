@@ -118,13 +118,14 @@ refreshLoader.start()
 def options = new Options()
 options.addOption('l', 'list', false, '')
 options.addOption('c', 'create', false, 'create')
-options.addOption('t', 'type', true, 'region/az/vpc/subnet/instance/instanceType/image/localAwsResource')
+options.addOption('t', 'type', true, 'region/az/vpc/subnet/keyPair/instance/instanceTypeFamily/instanceType/image/localAwsResource')
 options.addOption('r', 'region', true, '--region=ap-northeast-1')
 options.addOption('a', 'az', true, '--az=ap-northeast-1a')
 options.addOption('v', 'vpcId', true, '--vpcId=vpcId')
 options.addOption('s', 'subnetId', true, '--subnetId=subnetId')
 options.addOption('b', 'cidrBlock', true, '--cidrBlock=10.1.0.0/16')
 options.addOption('k', 'keyword', true, 'for filter when list instance type/image, eg. --keyword=c3.')
+options.addOption('K', 'keyPairName', true, '--keyPairName=kerry-key-pair')
 options.addOption('A', 'architecture', true, 'for filter when list instance type/image, eg. --architecture=x86_64')
 options.addOption('e', 'ec2', true, 'launch ec2 instance')
 options.addOption('p', 'publicIpv4', false, 'set true if launch ec2 instance with a public ipv4')
@@ -151,6 +152,7 @@ String globalInstanceId
 String globalImageId = c.get('default.image.id')
 String globalInstanceType = c.get('default.instance.type')
 String globalArchitecture = c.get('default.architecture')
+String globalKeyPairName = c.get('default.ec2.key.pair.name')
 
 String lastLine
 
@@ -210,6 +212,9 @@ while (true) {
         if (globalArchitecture && !finalLine.contains('-A=') && !finalLine.contains('--architecture=')) {
             finalLine += (' -A=' + globalArchitecture)
         }
+        if (globalKeyPairName && !finalLine.contains('-K=') && !finalLine.contains('--keyPairName=')) {
+            finalLine += (' -K=' + globalKeyPairName)
+        }
 
         lastLine = finalLine
         CommandLine cmd
@@ -238,29 +243,26 @@ while (true) {
         if (cmd.hasOption('az')) {
             globalAz = cmd.getOptionValue('az')
         }
-
         if (cmd.hasOption('vpcId')) {
             globalVpcId = cmd.getOptionValue('vpcId')
         }
-
         if (cmd.hasOption('subnetId')) {
             globalSubnetId = cmd.getOptionValue('subnetId')
         }
-
         if (cmd.hasOption('instanceId')) {
             globalInstanceId = cmd.getOptionValue('instanceId')
         }
-
         if (cmd.hasOption('imageId')) {
             globalImageId = cmd.getOptionValue('imageId')
         }
-
         if (cmd.hasOption('instanceType')) {
             globalInstanceType = cmd.getOptionValue('instanceType')
         }
-
         if (cmd.hasOption('architecture')) {
             globalArchitecture = cmd.getOptionValue('architecture')
+        }
+        if (cmd.hasOption('keyPairName')) {
+            globalKeyPairName = cmd.getOptionValue('keyPairName')
         }
 
         if (cmd.hasOption('x_session_current_variables')) {
@@ -272,6 +274,7 @@ while (true) {
             println 'image id: '.padRight(20, ' ') + globalImageId
             println 'instance type: '.padRight(20, ' ') + globalInstanceType
             println 'architecture: '.padRight(20, ' ') + globalArchitecture
+            println 'key pair name: '.padRight(20, ' ') + globalKeyPairName
             continue
         }
 

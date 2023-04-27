@@ -50,8 +50,8 @@ class AliyunCaller {
         return body.zones.zone
     }
 
-    List<DescribeInstanceTypesResponseBody.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType> getInstanceTypeList(String instanceTypePattern, String architecture) {
-        def request = new DescribeInstanceTypesRequest().setInstanceTypeFamily(instanceTypePattern).setCpuArchitecture(architecture)
+    List<DescribeInstanceTypesResponseBody.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType> getInstanceTypeList(String instanceTypeFamilyPattern, String architecture) {
+        def request = new DescribeInstanceTypesRequest().setInstanceTypeFamily(instanceTypeFamilyPattern).setCpuArchitecture(architecture)
         def result = ecsClient.describeInstanceTypes(request)
         def body = result.body
         return body.instanceTypes.instanceType
@@ -281,6 +281,14 @@ class AliyunCaller {
             return null
         }
         body.keyPairs.keyPair[0]
+    }
+
+    List<DescribeKeyPairsResponseBody.DescribeKeyPairsResponseBodyKeyPairsKeyPair> listKeyPair(String regionId) {
+        def request = new com.aliyun.ecs20140526.models.DescribeKeyPairsRequest()
+                .setRegionId(regionId)
+        def result = ecsClient.describeKeyPairs(request)
+        def body = result.body
+        body.keyPairs.keyPair
     }
 
     String runEc2Instance(CreateInstanceRequest request) {

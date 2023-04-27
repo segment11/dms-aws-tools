@@ -101,6 +101,26 @@ list
         return
     }
 
+    if ('keyPair' == type) {
+        def region = cmd.getOptionValue('region')
+        def list = caller.listKeyPair(region)
+        if (!list) {
+            log.warn 'no key pair found'
+            return
+        }
+
+        // aliyun key type/key pair id null
+        List<List<String>> table = []
+        List<String> header = ['key pair id', 'key name', 'key type', 'key fingerprint']
+        table << header
+        list.each {
+            List<String> row = [it.keyPairId ?: '', it.keyName, it.keyType ?: '', it.keyFingerprint]
+            table << row
+        }
+        TablePrinter.print(table)
+        return
+    }
+
     if ('instance' == type) {
         def region = cmd.getOptionValue('region')
         def vpcIdShort = cmd.getOptionValue('vpcId')
@@ -124,10 +144,10 @@ list
         CacheSession.instance.instanceList = list
 
         List<List<String>> table = []
-        List<String> header = ['instance id', 'instance type', 'state', 'private ip', 'public ip']
+        List<String> header = ['instance id', 'instance type', 'state', 'private ip', 'public ip', 'image id']
         table << header
         list.each {
-            List<String> row = [it.instanceId, it.instanceType, it.state.toString(), it.privateIpAddress, it.publicIpAddress]
+            List<String> row = [it.instanceId, it.instanceType, it.state.toString(), it.privateIpAddress, it.publicIpAddress, it.imageId]
             table << row
         }
         TablePrinter.print(table)
@@ -198,7 +218,8 @@ list
             return
         }
 
-        def list = caller.getImageListInRegion(region, keyword, architecture)
+        def architectureFinal = AwsCaller.instance.isAliyun ? (architecture == 'X86' ? 'X86_64' : architecture) : architecture
+        def list = caller.getImageListInRegion(region, keyword, architectureFinal)
         if (!list) {
             log.warn 'no image- found'
             return
