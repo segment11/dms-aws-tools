@@ -153,11 +153,12 @@ class InitAgentEnvSupport {
         String destDockerDir = dockerTarFile.replace('.tar', '')
         def engineInstallCmd = "apt install -y ${destDockerDir}/docker-ce_20.10.21_3-0_debian-bullseye_amd64.deb".toString()
 
-        List<OneCmd> finalCommandList = cmdAsRoot new OneCmd(cmd: engineInstallCmd, maxWaitTimes: 1200,
-                checker: OneCmd.keyword(' 0 newly installed', 'Processing triggers', ':' + userHomeDir).failKeyword('Permission')),
+        List<OneCmd> finalCommandList = cmdAsRoot new OneCmd(cmd: engineInstallCmd, maxWaitTimes: 300,
+                checker: OneCmd.keyword(' 0 newly installed', 'Processing triggers', ':' + userHomeDir)
+                        .failKeyword('Permission', 'broken packages')),
                 new OneCmd(cmd: 'systemctl enable docker.service', checker: OneCmd.any())
 
-        deploy.exec(info, finalCommandList, 1200, true)
+        deploy.exec(info, finalCommandList, 300, true)
         finalCommandList.every { it.ok() }
     }
 
@@ -180,10 +181,13 @@ class InitAgentEnvSupport {
 
         // 200ms once 600 times -> 120s -> 2m
         List<OneCmd> commandList = cmdAsRoot new OneCmd(cmd: 'chmod -R 777 ' + destDockerDir, checker: OneCmd.any()),
-                new OneCmd(cmd: containerdInstallCmd, maxWaitTimes: 600,
-                        checker: OneCmd.keyword(' 0 newly installed', 'Processing triggers', ':' + userHomeDir).failKeyword('Permission')),
-                new OneCmd(cmd: clientInstallCmd, maxWaitTimes: 1200,
-                        checker: OneCmd.keyword(' 0 newly installed', 'Processing triggers', ':' + userHomeDir).failKeyword('Permission'))
+                new OneCmd(cmd: 'apt update', checker: OneCmd.keyword('apt list --upgradable', ':' + userHomeDir)),
+                new OneCmd(cmd: containerdInstallCmd, maxWaitTimes: 300,
+                        checker: OneCmd.keyword(' 0 newly installed', 'Processing triggers', ':' + userHomeDir)
+                                .failKeyword('Permission', 'broken packages')),
+                new OneCmd(cmd: clientInstallCmd, maxWaitTimes: 600,
+                        checker: OneCmd.keyword(' 0 newly installed', 'Processing triggers', ':' + userHomeDir)
+                                .failKeyword('Permission', 'broken packages'))
 
         def isExecOk = deploy.exec(info, commandList, 1200, true)
         if (!isExecOk) {
