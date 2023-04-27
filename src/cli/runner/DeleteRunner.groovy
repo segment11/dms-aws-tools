@@ -1,7 +1,6 @@
 package cli.runner
 
 import aws.AwsCaller
-import com.segment.common.Conf
 import model.MontAwsResourceDTO
 import org.slf4j.LoggerFactory
 import support.CacheSession
@@ -11,6 +10,7 @@ def log = LoggerFactory.getLogger(this.getClass())
 
 h.add('delete runner') { cmd ->
     '''
+stop
 delete
 '''.readLines().collect { it.trim() }.findAll { it }.any {
         cmd.hasOption(it)
@@ -116,17 +116,31 @@ delete
             return
         }
 
-        def ec2Instance = caller.getEc2InstanceById(region, instanceId)
-        if (!ec2Instance) {
+        def instance = caller.getEc2InstanceById(region, instanceId)
+        if (!instance) {
             log.warn 'no instance found'
             return
         }
 
         // check state
-        def state = ec2Instance.state.name
-        def ip = ec2Instance.privateIpAddress
-        if ('running' == state) {
-            log.warn 'instance is running, please stop it first'
+        def code = instance.state.code
+        def ip = instance.privateIpAddress
+
+        if (cmd.hasOption('stop')) {
+            if (code == 80) {
+                log.warn 'instance is already stopped'
+                return
+            } else if (code == 48) {
+                log.warn 'instance is already terminated'
+                return
+            }
+        }
+
+        def isOperateDelete = cmd.hasOption('delete')
+        if (16 == code) {
+            if (isOperateDelete) {
+                log.warn 'instance is running, please stop it first'
+            }
             def result = caller.stopEc2Instance(region, instanceId)
             log.info 'stop result: {}', result
             def isWaitOk = caller.waitUntilInstanceStateCode(region, instanceId, 80)
@@ -134,22 +148,37 @@ delete
                 log.info 'instance is not stopped yet. ip: {}', ip
                 return
             }
-        }
 
-        if ('stopped' == state) {
-            def result2 = caller.terminateEc2Instance(region, instanceId)
-            log.info 'terminate result: {}', result2
-            def isWaitOk2 = caller.waitUntilInstanceStateCode(region, instanceId, 48)
-            if (!isWaitOk2) {
-                log.info 'instance is not terminated yet. ip: {}', ip
+            if (!isOperateDelete) {
                 return
             }
-
-            log.info 'instance is terminated. ip: {}', ip
-            new MontAwsResourceDTO(arn: instanceId).delete()
-            return
         }
 
+        if (isOperateDelete) {
+            if (code == 80) {
+                // aliyun just delete
+                def result2 = caller.terminateEc2Instance(region, instanceId)
+                log.info 'terminate result: {}', result2
+
+                // aws terminate instance is async, wait until terminated
+                if (caller.isAws) {
+                    def isWaitOk2 = caller.waitUntilInstanceStateCode(region, instanceId, 48)
+                    if (!isWaitOk2) {
+                        log.info 'instance is not terminated yet. ip: {}', ip
+                        return
+                    }
+                }
+
+                log.info 'instance is terminated. ip: {}', ip
+                new MontAwsResourceDTO(arn: instanceId).delete()
+                return
+            } else {
+                log.warn 'instance is not stopped yet. ip: {}', ip
+                return
+            }
+        }
+
+        log.warn 'why come here?'
         return
     }
 

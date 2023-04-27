@@ -57,9 +57,8 @@ ec2
     def subnet = caller.getSubnetById(region, subnetId)
     def az = subnet.availabilityZone
 
-    def keyName = Conf.instance.getString('default.ec2.key.pair.name', 'dms-node-only-one')
     def manager = AwsResourceManager.instance
-    manager.getKeyPair(region, keyName)
+    manager.getKeyPair(region, keyPairName)
 
     def groupId = caller.getDefaultGroupId(region, vpcId)
 
@@ -75,7 +74,7 @@ ec2
             withTags(new Tag('name', name))
 
     def request = new RunInstancesRequest().
-            withKeyName(keyName).
+            withKeyName(keyPairName).
             withImageId(imageId).
             withMinCount(1).
             withMaxCount(1).
@@ -87,7 +86,8 @@ ec2
 
     final int runningStateCode = 16
     if (!instanceInfo.running()) {
-        def isWaitOk = caller.waitUntilInstanceStateCode(region, instanceInfo.id, runningStateCode)
+        int maxWaitTimes = Conf.instance.getInt('ec2.state.change.wait.times', 12)
+        def isWaitOk = caller.waitUntilInstanceStateCode(region, instanceInfo.id, runningStateCode, 10000, maxWaitTimes)
         if (isWaitOk) {
             instanceInfo.stateCode = runningStateCode
             Event.builder().type(Event.Type.ec2).

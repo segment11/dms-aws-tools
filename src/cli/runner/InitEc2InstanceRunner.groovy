@@ -22,8 +22,11 @@ ec2Init
 
     def region = cmd.getOptionValue('region')
     def instanceIdShort = cmd.getOptionValue('instanceId')
-    if (!instanceIdShort) {
-        log.warn 'instanceId required'
+    def keyPairName = cmd.getOptionValue('keyPairName')
+    def user = cmd.getOptionValue('user')
+    def type = cmd.getOptionValue('type')
+    if (!instanceIdShort || !keyPairName || !user || !type) {
+        log.warn 'instanceId, keyPairName, user and type required'
         return
     }
 
@@ -33,28 +36,27 @@ ec2Init
         return
     }
 
-    def ec2Instance = AwsCaller.instance.getEc2InstanceById(region, instanceId)
-    if (!ec2Instance) {
+    def instance = AwsCaller.instance.getEc2InstanceById(region, instanceId)
+    if (!instance) {
         log.warn 'instance not exists'
         return
     }
 
-    def keyName = c.getString('default.ec2.key.pair.name', 'dms-node-only-one')
     def manager = AwsResourceManager.instance
-    def keyPair = manager.getKeyPair(region, keyName)
+    def keyPair = manager.getKeyPair(region, keyPairName)
     if (!keyPair) {
         log.warn 'key pair already created, the primary key content is in another H2 local file'
         return
     }
 
-    def publicIpv4 = ec2Instance.publicIpAddress
-    def privateIpv4 = ec2Instance.privateIpAddress
+    def publicIpv4 = instance.publicIpAddress
+    def privateIpv4 = instance.privateIpAddress
 
     def info = new RemoteInfo()
     // public ip is limited, so use private ip, run this tool in the same vpc
     info.host = publicIpv4 ?: privateIpv4
     info.port = 22
-    info.user = 'admin'
+    info.user = user
     info.isUsePass = false
     info.privateKeySuffix = '.pem'
     info.privateKeyContent = keyPair.keyMaterial
@@ -71,7 +73,6 @@ ec2Init
     }
     info.rootPass = support.initRootPass
 
-    def type = cmd.getOptionValue('type')
     if ('tar' == type) {
         List<OneCmd> cmdList = []
         cmdList << new OneCmd(cmd: 'wget -N https://www.montplex.com/static-dl/docker.tar -O ' + support.dockerTarFile, checker: OneCmd.keyword('saved'))
@@ -88,13 +89,14 @@ ec2Init
         if (!support.unTar(support.agentTarFile)) {
             log.warn 'un tar agent fail'
         }
+
+        log.info 'done'
         return
     }
 
-    def ipPrivate = ec2Instance.privateIpAddress
     if ('dmsServer' == type) {
-        log.info 'ip private: {}', ipPrivate
-        def privateIpPrefix = ipPrivate.split(/\./)[0] + '.'
+        log.info 'ip private: {}', privateIpv4
+        def privateIpPrefix = privateIpv4.split(/\./)[0] + '.'
         def confFileContent = """
 dbDataFile=/data/dms/db;FILE_LOCK=socket
 agent.javaCmd=../jdk8/zulu8.64.0.19-ca-jdk8.0.345-linux_x64/bin/java -Xms128m -Xmx256m
@@ -103,7 +105,7 @@ localIpFilterPre=${privateIpPrefix}
         new File('/tmp/dms.conf.properties').text = confFileContent.toString()
 
         def deploy = DeploySupport.instance
-        deploy.send(info, '/tmp/dms.conf.properties', '/home/admin/conf.properties')
+        deploy.send(info, '/tmp/dms.conf.properties', support.userHomeDir + '/conf.properties')
         log.info 'send dms.conf.properties success'
 
         // pull dms docker image
@@ -112,11 +114,11 @@ localIpFilterPre=${privateIpPrefix}
             return
         }
 
-        c.put('dms.cluster.host', ipPrivate)
+        c.put('dms.cluster.host', privateIpv4)
 
         def startDmsServerCmd = """
-docker run -d --name=dms --cpus="1" -v /home/admin/conf.properties:/opt/dms/conf.properties -v /opt/log:/opt/log -v /data/dms:/data/dms --net=host key232323/dms
-"""
+docker run -d --name=dms -v ${support.userHomeDir}/conf.properties:/opt/dms/conf.properties -v /opt/log:/opt/log -v /data/dms:/data/dms --net=host key232323/dms
+""".toString()
         def commandList = support.cmdAsRoot new OneCmd(cmd: startDmsServerCmd, checker: OneCmd.any())
 
         def result = deploy.exec(info, commandList, 10, true)
@@ -127,17 +129,49 @@ docker run -d --name=dms --cpus="1" -v /home/admin/conf.properties:/opt/dms/conf
     if ('dmsAgent' == type) {
         def clusterId = c.getInt('dms.cluster.id', 1)
         def secret = c.getString('dms.cluster.secret', '1')
-        def dmsServerHost = c.get('dms.cluster.host')
+        def dmsServerHost = c.getString('dms.cluster.host', privateIpv4)
 
         def agentConf = new AgentConf()
         agentConf.serverHost = dmsServerHost
         agentConf.clusterId = clusterId
         agentConf.secret = secret
-        agentConf.localIpFilterPre = ipPrivate.split(/\./)[0] + '.'
+        agentConf.localIpFilterPre = privateIpv4.split(/\./)[0] + '.'
 
         support.initAgentConf(agentConf)
         support.startAgentCmd()
 
+        return
+    }
+
+    if ('uploadToolsJar' == type) {
+        def destBaseDir = support.userHomeDir + '/dms-aws-tools'
+        def isOk = support.mkdir(destBaseDir)
+        if (!isOk) {
+            log.warn 'mkdir fail'
+            return
+        }
+
+        def deploy = DeploySupport.instance
+        def confLocalFilePath = Conf.instance.projectPath('/conf.properties')
+        def jarLocalFilePath = Conf.instance.projectPath('/build/libs/dms-aws-tools-1.0.jar')
+
+        deploy.send(info, confLocalFilePath, destBaseDir + '/conf.properties')
+        deploy.send(info, jarLocalFilePath, destBaseDir + '/dms-aws-tools-1.0.jar')
+
+        log.info 'done'
+        return
+    }
+
+    if ('copyLocalTar' == type) {
+        def deploy = DeploySupport.instance
+        deploy.send(info, support.dockerTarFile, support.dockerTarFile)
+        deploy.send(info, support.jdkTarFile, support.jdkTarFile)
+        deploy.send(info, support.agentTarFile, support.agentTarFile)
+
+        support.unTar(support.jdkTarFile)
+        support.unTar(support.agentTarFile)
+
+        log.info 'done'
         return
     }
 
@@ -156,11 +190,14 @@ docker run -d --name=dms --cpus="1" -v /home/admin/conf.properties:/opt/dms/conf
             return
         }
 
-        def commandList = support.cmdAsRoot new OneCmd(cmd: '/usr/sbin/usermod -a -G docker admin', checker: OneCmd.any())
-        def deploy = DeploySupport.instance
-        def result = deploy.exec(info, commandList, 10, true)
-        log.info 'add admin to group docker result: {}', result
+        if ('root' != info.user) {
+            def commandList = support.cmdAsRoot new OneCmd(cmd: '/usr/sbin/usermod -a -G docker ' + info.user, checker: OneCmd.any())
+            def deploy = DeploySupport.instance
+            def result = deploy.exec(info, commandList, 10, true)
+            log.info 'add user to group docker result: {}', result
+        }
 
+        log.info 'done'
         return
     }
 

@@ -288,9 +288,9 @@ class AwsResourceManager {
         awsCaller.deleteKeyPair(region, keyName)
     }
 
-    synchronized KeyPair getKeyPair(String region, String keyName) {
+    synchronized KeyPair getKeyPair(String region, String keyPairName) {
         // get key pair
-        String subKey = keyName
+        String subKey = keyPairName
         def one = new MontAwsResourceDTO(
                 type: MontAwsResourceDTO.Type.kp.name(),
                 subKey: subKey).one()
@@ -307,16 +307,16 @@ class AwsResourceManager {
         }
 
         // check if already exists
-        def isKeyPairExists = awsCaller.getKeyPair(region, keyName) != null
+        def isKeyPairExists = awsCaller.getKeyPair(region, keyPairName) != null
         if (isKeyPairExists) {
-            log.warn('key pair already exists: {}', keyName)
+            log.warn('key pair already exists: {}', keyPairName)
             return null
         }
 
         Event.builder().type(Event.Type.ec2).reason('create kp').
                 result('region: ' + region).build().log('subKey: ' + subKey).add()
 
-        def keyPair = awsCaller.createKeyPair(region, keyName)
+        def keyPair = awsCaller.createKeyPair(region, keyPairName)
 
         Map<String, String> params = [:]
         params.keyFingerprint = keyPair.keyFingerprint

@@ -9,7 +9,6 @@ import com.amazonaws.regions.Regions
 import com.amazonaws.services.ec2.AmazonEC2
 import com.amazonaws.services.ec2.AmazonEC2AsyncClient
 import com.amazonaws.services.ec2.model.*
-import com.segment.common.Conf
 import groovy.transform.CompileStatic
 import groovy.transform.Memoized
 import groovy.util.logging.Slf4j
@@ -621,6 +620,10 @@ class AwsCaller {
 
             def instanceId = AliyunCaller.instance.runEc2Instance(req)
             def instance = getEc2InstanceById(regionName, instanceId)
+            if (!instance) {
+                throw new IllegalStateException('instance not found, instanceId: ' + instanceId)
+            }
+
             if (net.associatePublicIpAddress) {
                 String publicIpAddress = AliyunCaller.instance.allocatePublicIpAddress(instanceId)
                 instance.withPublicIpAddress(publicIpAddress)
@@ -730,6 +733,9 @@ class AwsCaller {
     }
 
     Instance fromAliyunInstance(DescribeInstancesResponseBody.DescribeInstancesResponseBodyInstancesInstance one) {
+        if (one == null) {
+            return null
+        }
         def privateIp = one.networkInterfaces.networkInterface[0].primaryIpAddress
         new Instance()
                 .withInstanceId(one.instanceId)
@@ -740,12 +746,10 @@ class AwsCaller {
                 .withState(getStateFromAliyunStatus(one.status))
     }
 
-    InstanceStatus getEc2InstanceStatus(String regionName, String instanceId) {
+    InstanceState getEc2InstanceStatus(String regionName, String instanceId) {
         if (isAliyun) {
             def r = AliyunCaller.instance.getEc2InstanceStatus(regionName, instanceId)
-            return new InstanceStatus().
-                    withInstanceId(instanceId).
-                    withInstanceState(getStateFromAliyunStatus(r.status))
+            return getStateFromAliyunStatus(r.status)
         }
 
         def client = getEc2Client(regionName)
@@ -756,7 +760,7 @@ class AwsCaller {
         if (!result.instanceStatuses) {
             return null
         }
-        result.instanceStatuses[0]
+        result.instanceStatuses[0].instanceState
     }
 
     /*
@@ -768,20 +772,19 @@ class AwsCaller {
 80 : stopped
      */
 
-    boolean waitUntilInstanceStateCode(String regionName, String instanceId, int targetStateCode) {
-        def itemValueWaitTimes = Conf.instance.getInt('ec2.state.change.wait.times', 12)
-        // 2min
-        int maxWaitTimes = itemValueWaitTimes ? itemValueWaitTimes as int : 12
+    boolean waitUntilInstanceStateCode(String regionName, String instanceId, int targetStateCode, long sleepMsWaitOnce = 10000, int maxWaitTimes = 6) {
+        log.info 'begin wait until instance state code match. instance id: {}, target state code: {}', instanceId, targetStateCode
         int count = 0
         while (count <= maxWaitTimes) {
             count++
-            Thread.currentThread().sleep(10000)
+            log.info 'waiting {}ms, already wait {}ms', sleepMsWaitOnce, count * sleepMsWaitOnce
+            Thread.currentThread().sleep(sleepMsWaitOnce)
 
-            def stateCode = getEc2InstanceStatus(regionName, instanceId)
-            if (targetStateCode == stateCode) {
+            def state = getEc2InstanceStatus(regionName, instanceId)
+            if (targetStateCode == state.code) {
                 return true
             } else {
-                log.info 'instance state is not match yet. instance id: {}, current state: {}', instanceId, stateCode
+                log.info 'instance state is not match yet. instance id: {}, current state: {}/{}', instanceId, state.code, state.name
             }
         }
         false

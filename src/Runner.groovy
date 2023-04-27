@@ -54,7 +54,7 @@ projectDir.eachFile {
 
 // init db access
 def dbDataFile = c.getString('db.data.file', c.projectPath('/dms-aws-tools-data'))
-def ds = Ds.h2LocalWithPool(dbDataFile, 'default_ds')
+def ds = Ds.h2Local(dbDataFile).cacheAs('default_ds')
 def d = new D(ds, new MySQLDialect())
 // check if need create table first
 List<String> tableNameList = d.query("SELECT table_name FROM INFORMATION_SCHEMA.TABLES", String).collect { it.toUpperCase() }
@@ -125,14 +125,16 @@ options.addOption('v', 'vpcId', true, '--vpcId=vpcId')
 options.addOption('s', 'subnetId', true, '--subnetId=subnetId')
 options.addOption('b', 'cidrBlock', true, '--cidrBlock=10.1.0.0/16')
 options.addOption('k', 'keyword', true, 'for filter when list instance type/image, eg. --keyword=c3.')
-options.addOption('K', 'keyPairName', true, '--keyPairName=kerry-key-pair')
+options.addOption('K', 'keyPairName', true, 'create if not exist when launch ec2 instance --keyPairName=kerry-key-pair')
 options.addOption('A', 'architecture', true, 'for filter when list instance type/image, eg. --architecture=x86_64')
 options.addOption('e', 'ec2', true, 'launch ec2 instance')
 options.addOption('p', 'publicIpv4', false, 'set true if launch ec2 instance with a public ipv4')
 options.addOption('E', 'ec2Init', false, 'init ec2 instance, use with --instanceId and --type')
+options.addOption('u', 'user', true, 'ssh user when connect to ec2 instance, use with --ec2Init')
 options.addOption('m', 'imageId', true, 'image id')
 options.addOption('i', 'instanceType', true, 'instance type')
 options.addOption('I', 'instanceId', true, 'instance id')
+options.addOption('S', 'stop', false, 'stop instance, use with --instanceId')
 options.addOption('D', 'delete', false,
         'delete aws resource, use with --type and --vpcId or --subnetId or --instanceId')
 options.addOption('H', 'help', false, 'args help')

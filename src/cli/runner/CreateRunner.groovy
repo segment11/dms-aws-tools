@@ -64,11 +64,12 @@ create
         return
     }
 
-    if ('keyPairLocal' == type) {
+    if ('keyPairLoadFromLocal' == type) {
         def region = cmd.getOptionValue('region')
         def vpcIdShort = cmd.getOptionValue('vpcId')
-        if (!vpcIdShort) {
-            log.warn 'vpcId required'
+        def keyPairName = cmd.getOptionValue('keyPairName')
+        if (!vpcIdShort || !keyPairName) {
+            log.warn 'vpcId and keyPairName required'
             return
         }
 
@@ -78,15 +79,15 @@ create
             return
         }
 
-        def f = new File('/home/kerry/dms-node-kp.pem')
+        def userHomeDir = System.getProperty('user.home')
+        def f = new File(userHomeDir + '/.ssh/' + keyPairName + '.pem')
         if (!f.exists()) {
-            log.warn 'file not exists'
+            log.warn 'file not exists, file path: {}', f.absolutePath
             return
         }
         def content = f.text
 
-        def keyName = Conf.instance.getString('default.ec2.key.pair.name', 'dms-node-only-one')
-        def keyPairInfo = AwsCaller.instance.getKeyPair(region, keyName)
+        def keyPairInfo = AwsCaller.instance.getKeyPair(region, keyPairName)
         if (!keyPairInfo) {
             log.warn 'key pair not exists'
             return
@@ -95,7 +96,7 @@ create
         Map<String, String> params = [:]
         params.keyFingerprint = keyPairInfo.keyFingerprint
 
-        params.keyName = keyName
+        params.keyName = keyPairName
         // aliyun no keyPairId
         params.keyPairId = keyPairInfo.keyPairId
         params.keyMaterial = content
@@ -105,7 +106,7 @@ create
                 region: region,
                 type: MontAwsResourceDTO.Type.kp.name(),
                 arn: keyPairInfo.keyPairId,
-                subKey: keyName,
+                subKey: keyPairName,
                 extendParams: new ExtendParams(params: params)).add()
         log.info 'add to local db success'
         return

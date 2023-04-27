@@ -12,7 +12,7 @@ class InitAgentEnvSupport {
 
     InitAgentEnvSupport(RemoteInfo info) {
         this.info = info
-        this.userHomeDir = '/home/' + info.user
+        this.userHomeDir = info.user == 'root' ? '/root' : '/home/' + info.user
         this.dockerTarFile = userHomeDir + '/docker.tar'
         this.jdkTarFile = userHomeDir + '/jdk8.tar.gz'
         this.agentTarFile = userHomeDir + '/agentV1.tar.gz'
@@ -42,12 +42,13 @@ class InitAgentEnvSupport {
     }
 
     List<OneCmd> cmdAsRoot(OneCmd... extList) {
-        def list = [
-                new OneCmd(cmd: 'pwd', checker: OneCmd.keyword(info.user + '@')),
-                new OneCmd(cmd: 'su', checker: OneCmd.keyword('Password:')),
-                new OneCmd(cmd: info.rootPass, showCmdLog: false,
-                        checker: OneCmd.keyword('root@').failKeyword('failure'))
-        ]
+        def list = [new OneCmd(cmd: 'pwd', checker: OneCmd.keyword(info.user + '@'))]
+
+        if ('root' != info.user) {
+            list << new OneCmd(cmd: 'su', checker: OneCmd.keyword('Password:'))
+            list << new OneCmd(cmd: info.rootPass, showCmdLog: false,
+                    checker: OneCmd.keyword('root@').failKeyword('failure'))
+        }
         for (one in extList) {
             list << one
         }
@@ -153,7 +154,7 @@ class InitAgentEnvSupport {
         def engineInstallCmd = "apt install -y ${destDockerDir}/docker-ce_20.10.21_3-0_debian-bullseye_amd64.deb".toString()
 
         List<OneCmd> finalCommandList = cmdAsRoot new OneCmd(cmd: engineInstallCmd, maxWaitTimes: 1200,
-                checker: OneCmd.keyword('0 newly installed', 'Processing triggers', ':/home/admin')),
+                checker: OneCmd.keyword(' 0 newly installed', 'Processing triggers', ':' + userHomeDir).failKeyword('Permission')),
                 new OneCmd(cmd: 'systemctl enable docker.service', checker: OneCmd.any())
 
         deploy.exec(info, finalCommandList, 1200, true)
@@ -178,10 +179,11 @@ class InitAgentEnvSupport {
         def clientInstallCmd = "apt install -y ${destDockerDir}/docker-ce-cli_20.10.21_3-0_debian-bullseye_amd64.deb".toString()
 
         // 200ms once 600 times -> 120s -> 2m
-        List<OneCmd> commandList = cmdAsRoot new OneCmd(cmd: containerdInstallCmd, maxWaitTimes: 600,
-                checker: OneCmd.keyword('0 newly installed', 'Processing triggers', ':/home/admin')),
+        List<OneCmd> commandList = cmdAsRoot new OneCmd(cmd: 'chmod -R 777 ' + destDockerDir, checker: OneCmd.any()),
+                new OneCmd(cmd: containerdInstallCmd, maxWaitTimes: 600,
+                        checker: OneCmd.keyword(' 0 newly installed', 'Processing triggers', ':' + userHomeDir).failKeyword('Permission')),
                 new OneCmd(cmd: clientInstallCmd, maxWaitTimes: 1200,
-                        checker: OneCmd.keyword('0 newly installed', 'Processing triggers', ':/home/admin'))
+                        checker: OneCmd.keyword(' 0 newly installed', 'Processing triggers', ':' + userHomeDir).failKeyword('Permission'))
 
         def isExecOk = deploy.exec(info, commandList, 1200, true)
         if (!isExecOk) {

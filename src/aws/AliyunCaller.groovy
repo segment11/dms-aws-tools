@@ -293,7 +293,25 @@ class AliyunCaller {
 
     String runEc2Instance(CreateInstanceRequest request) {
         def result = ecsClient.createInstance(request)
-        result.body.instanceId
+        def instanceId = result.body.instanceId
+
+        def regionId = request.regionId
+        // aliyun create instance status is stopped, code is 80
+        AwsCaller.instance.waitUntilInstanceStateCode(regionId, instanceId, 80, 5000, 12)
+
+        // run instance
+        def request2 = new StartInstancesRequest()
+                .setRegionId(regionId)
+                .setInstanceId([instanceId])
+        def result2 = ecsClient.startInstances(request2)
+        def body2 = result2.body
+        def list2 = body2.instanceResponses.instanceResponse
+        if (!list2) {
+            throw new IllegalStateException('start instance failed, instanceId: ' + instanceId)
+        }
+        log.info list2[0].toMap().toString()
+
+        instanceId
     }
 
     String allocatePublicIpAddress(String instanceId) {
@@ -305,7 +323,7 @@ class AliyunCaller {
     DescribeInstancesResponseBody.DescribeInstancesResponseBodyInstancesInstance getEc2InstanceById(String regionId, String instanceId) {
         def request = new DescribeInstancesRequest()
                 .setRegionId(regionId)
-                .setInstanceIds(instanceId)
+                .setInstanceIds('["' + instanceId + '"]')
         def result = ecsClient.describeInstances(request)
         def body = result.body
         if (body.totalCount == 0) {
