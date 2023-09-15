@@ -31,7 +31,7 @@ class AwsResourceManager {
     synchronized VpcInfo createVpcIfNotExists(String region, String cidrBlock) {
         def oneList = new MontAwsResourceDTO(
                 region: region,
-                type: MontAwsResourceDTO.Type.vpc.name()).loadList()
+                type: MontAwsResourceDTO.Type.vpc.name()).list()
         if (oneList) {
             for (one in oneList) {
                 def vpcInfo = VpcInfo.from(one.extendParams)

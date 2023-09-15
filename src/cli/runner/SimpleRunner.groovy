@@ -237,7 +237,7 @@ list
     }
 
     if ('localAwsResource' == type) {
-        def list = new MontAwsResourceDTO().noWhere().loadList()
+        def list = new MontAwsResourceDTO().noWhere().list()
         if (!list) {
             log.warn 'no local aws resource found'
             return
